@@ -470,7 +470,7 @@ export async function ensureDatabaseSeeded(): Promise<void> {
     if (settingsCount === 0) {
       await db.settings.put({
         id: 'default',
-        defaultSchoolName: 'TRƯỜNG THPT THỰC HÀNH SMART LITERATURE',
+        defaultSchoolName: '',
         defaultDepartmentName: 'TỔ NGỮ VĂN',
         defaultAcademicYear: '2025 - 2026',
         wordFontFamily: 'Times New Roman',
