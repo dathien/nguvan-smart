@@ -19,7 +19,7 @@ export const SettingsPage: React.FC = () => {
 
   const [settings, setSettings] = useState<AppSettings>({
     id: 'default',
-    defaultSchoolName: 'TRƯỜNG THPT THỰC HÀNH SMART LITERATURE',
+    defaultSchoolName: '',
     defaultDepartmentName: 'TỔ NGỮ VĂN',
     defaultAcademicYear: '2025 - 2026',
     wordFontFamily: 'Times New Roman',
@@ -40,7 +40,7 @@ export const SettingsPage: React.FC = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     await db.settings.put(settings);
-    setSavedNotice('Đã lưu cấu hình mặc định cho định dạng Word và in A4.');
+    setSavedNotice('Đã lưu thông tin đơn vị cho đề mới và định dạng tài liệu.');
   };
 
   return (
@@ -86,6 +86,7 @@ export const SettingsPage: React.FC = () => {
             </label>
             <input
               type="text"
+              placeholder="Nhập tên trường thực tế"
               value={settings.defaultSchoolName}
               onChange={(e) =>
                 setSettings({ ...settings, defaultSchoolName: e.target.value })

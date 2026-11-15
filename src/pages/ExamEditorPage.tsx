@@ -79,7 +79,7 @@ const VERIFICATION_STATUSES: SourceVerificationStatus[] = [
   'Ngữ liệu tự biên soạn',
 ];
 
-function createBlankExamFromTemplate(templateId: string): ExamDocument {
+function createBlankExamFromTemplate(templateId: string, settings?: AppSettings): ExamDocument {
   const tpl =
     EXAM_TEMPLATES.find((t) => t.id === templateId) || EXAM_TEMPLATES[0];
   const now = new Date().toISOString();
@@ -92,6 +92,9 @@ function createBlankExamFromTemplate(templateId: string): ExamDocument {
     ownerId: 'teacher-dathien',
     adminInfo: {
       ...DEFAULT_ADMIN_INFO,
+      schoolName: settings?.defaultSchoolName ?? "",
+      departmentName: settings?.defaultDepartmentName ?? DEFAULT_ADMIN_INFO.departmentName,
+      academicYear: settings?.defaultAcademicYear ?? DEFAULT_ADMIN_INFO.academicYear,
       grade,
       examType: tpl.examType,
       title: `ĐỀ ${tpl.examType.toUpperCase()} MÔN NGỮ VĂN LỚP ${grade}`,
@@ -199,7 +202,7 @@ export const ExamEditorPage: React.FC = () => {
   const [allExams, setAllExams] = useState<ExamDocument[]>([]);
   const [passageBank, setPassageBank] = useState<ReadingPassage[]>([]);
   const [settings, setSettings] = useState<AppSettings | undefined>(undefined);
-  const [editorTab, setEditorTab] = useState<EditorTab>('reading');
+  const [editorTab, setEditorTab] = useState<EditorTab>('admin');
   const [previewMode, setPreviewMode] = useState<PreviewMode>('exam');
   const [splitPercent, setSplitPercent] = useState(48);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -232,7 +235,7 @@ export const ExamEditorPage: React.FC = () => {
       if (target) {
         resetExamHistory(target);
       } else {
-        const fresh = createBlankExamFromTemplate('thpt-2025-4-6');
+        const fresh = createBlankExamFromTemplate('thpt-2025-4-6', appSettings);
         await saveExam(fresh);
         resetExamHistory(fresh);
         setAllExams([fresh]);
@@ -305,7 +308,7 @@ export const ExamEditorPage: React.FC = () => {
   };
 
   const handleCreateNew = async (templateId: string) => {
-    const created = createBlankExamFromTemplate(templateId);
+    const created = createBlankExamFromTemplate(templateId, settings);
     await saveExam(created);
     const refreshed = await listExams();
     setAllExams(refreshed);
@@ -460,7 +463,7 @@ export const ExamEditorPage: React.FC = () => {
 
   return (
     <div
-      className={`flex flex-col ${
+      className={`exam-editor flex flex-col ${
         isFullscreen ? 'fixed inset-0 z-50 bg-[#FAF8F5]' : 'min-h-[calc(100vh-3.5rem)]'
       }`}
     >
@@ -589,7 +592,7 @@ export const ExamEditorPage: React.FC = () => {
                   type="button"
                   onClick={async () => {
                     setShowExportMenu(false);
-                    const b = await generateMatrixDocxBlob(exam);
+                    const b = await generateMatrixDocxBlob(exam, settings);
                     triggerBlobDownload(b, makeExamDocxFilename(exam, 'Ma_tran'));
                   }}
                   className="w-full text-left px-3.5 py-2 hover:bg-slate-50"
@@ -600,7 +603,7 @@ export const ExamEditorPage: React.FC = () => {
                   type="button"
                   onClick={async () => {
                     setShowExportMenu(false);
-                    const b = await generateSpecificationDocxBlob(exam);
+                    const b = await generateSpecificationDocxBlob(exam, settings);
                     triggerBlobDownload(b, makeExamDocxFilename(exam, 'Ban_dac_ta'));
                   }}
                   className="w-full text-left px-3.5 py-2 hover:bg-slate-50"
@@ -611,7 +614,7 @@ export const ExamEditorPage: React.FC = () => {
                   type="button"
                   onClick={async () => {
                     setShowExportMenu(false);
-                    const b = await generateGradingGuideDocxBlob(exam);
+                    const b = await generateGradingGuideDocxBlob(exam, settings);
                     triggerBlobDownload(b, makeExamDocxFilename(exam, 'Huong_dan_cham'));
                   }}
                   className="w-full text-left px-3.5 py-2 hover:bg-slate-50"
@@ -759,7 +762,7 @@ export const ExamEditorPage: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Tên trường / Đơn vị
+                      Tên trường / Đơn vị (có thể chỉnh sửa)
                     </label>
                     <input
                       type="text"
@@ -1866,6 +1869,8 @@ export const ExamEditorPage: React.FC = () => {
               mode={previewMode}
               fontFamily={settings?.wordFontFamily}
               fontSizePt={settings?.wordFontSizePt}
+              lineSpacing={settings?.wordLineSpacing}
+              margins={settings?.wordMarginsMm}
             />
           </div>
         </div>
