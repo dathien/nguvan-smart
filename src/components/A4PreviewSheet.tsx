@@ -127,7 +127,7 @@ export const A4PreviewSheet: React.FC<A4PreviewSheetProps> = ({
                   )
                 )}
               </div>
-              {(exam.passage.author || exam.passage.citationSource) && (
+              {exam.passage.verificationStatus !== 'Ngữ liệu tự biên soạn' && (exam.passage.author || exam.passage.citationSource) && (
                 <p className="text-right italic text-[0.95em] mb-3">
                   (Theo {exam.passage.author}
                   {exam.passage.citationSource ? ` – ${exam.passage.citationSource}` : ''}
