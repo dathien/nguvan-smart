@@ -331,7 +331,7 @@ export const LEARNING_OUTCOMES_BY_GENRE: Record<
 };
 
 export const DEFAULT_ADMIN_INFO: ExamAdminInfo = {
-  schoolName: 'TRƯỜNG THPT MẪU GDPT 2018',
+  schoolName: 'TRƯỜNG THPT',
   departmentName: 'TỔ NGỮ VĂN',
   academicYear: '2025 - 2026',
   semester: 'Học kỳ II',
