@@ -2,14 +2,15 @@
 
 @theme {
   --font-sans: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
-  --font-serif: 'Playfair Display', Georgia, serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-serif: 'Be Vietnam Pro', Arial, sans-serif;
+  --font-mono: 'Be Vietnam Pro', Arial, sans-serif;
 }
 
 @layer base {
   html {
     font-family: var(--font-sans);
-    font-size: 14px;
+    font-size: 16px;
+    line-height: 1.5;
     color: #102438;
     background-color: #FAF8F5;
   }
@@ -50,7 +51,7 @@
 @media print {
   @page {
     size: A4 portrait;
-    margin: 18mm 16mm 18mm 22mm;
+    margin: 0;
   }
 
   html,
@@ -75,7 +76,7 @@
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 !important;
-    padding: 0 !important;
+    padding: revert-layer;
     box-shadow: none !important;
     border: none !important;
     overflow: visible !important;
@@ -101,4 +102,16 @@
     break-before: page;
     page-break-before: always;
   }
+}
+
+/* Consistent readable controls outside printed document */
+#root :is(input,select,textarea):not([type=checkbox]):not([type=radio]):not([type=range]) { font-size:14px; line-height:1.5; min-height:36px; }
+#root textarea { line-height:1.6; }
+#root button { font-family:var(--font-sans); }
+.exam-editor .no-print button { font-size:13px; }
+.exam-editor .no-print label { font-size:13px; }
+@media print {
+ body:has(#a4-print-area) #root *:not(:has(#a4-print-area)):not(#a4-print-area):not(#a4-print-area *) { display:none !important; }
+ body:has(#a4-print-area) #root *:has(#a4-print-area) { display:block !important; overflow:visible !important; height:auto !important; min-height:0 !important; max-height:none !important; width:auto !important; position:static !important; margin:0 !important; padding:0 !important; }
+ #a4-print-area { min-height:0 !important; box-sizing:border-box; }
 }
