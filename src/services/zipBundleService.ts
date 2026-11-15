@@ -392,3 +392,17 @@ export async function restoreBackupPayload(
     questions: data.questions?.length ?? 0,
   };
 }
+
+export async function exportNumberedExamZip(exams: ExamDocument[], settings?: AppSettings): Promise<void> {
+  const zip = new JSZip();
+  for (const exam of exams) {
+    const folder = zip.folder(`Ma_de_${exam.adminInfo.examCode}`)!;
+    folder.file('De_kiem_tra.docx', await generateExamDocxBlob(exam, settings));
+    folder.file('Ma_tran.docx', await generateMatrixDocxBlob(exam, settings));
+    folder.file('Ban_dac_ta.docx', await generateSpecificationDocxBlob(exam, settings));
+    folder.file('Huong_dan_cham.docx', await generateGradingGuideDocxBlob(exam, settings));
+    folder.file('In_PDF.html', buildExamPrintableHtml(exam));
+    folder.file('Du_lieu_de.json', JSON.stringify(exam, null, 2));
+  }
+  triggerBlobDownload(await zip.generateAsync({type:'blob'}), 'Ho_so_nhieu_ma_de.zip');
+}
