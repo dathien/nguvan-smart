@@ -41,6 +41,7 @@ import { db } from '../database/db';
 import { useUndoRedo } from '../hooks/useUndoRedo';
 import {
   duplicateExam,
+  createNumberedExams,
   listExams,
   listPassages,
   saveExam,
@@ -57,7 +58,7 @@ import {
   makeExamDocxFilename,
   triggerBlobDownload,
 } from '../services/wordExportService';
-import { exportCompleteExamZip } from '../services/zipBundleService';
+import { exportCompleteExamZip, exportNumberedExamZip } from '../services/zipBundleService';
 import {
   AppSettings,
   CognitiveLevel,
@@ -92,7 +93,7 @@ function createBlankExamFromTemplate(templateId: string, settings?: AppSettings)
     ownerId: 'teacher-dathien',
     adminInfo: {
       ...DEFAULT_ADMIN_INFO,
-      schoolName: settings?.defaultSchoolName ?? "",
+      schoolName: settings?.defaultSchoolName || "TRƯỜNG THPT",
       departmentName: settings?.defaultDepartmentName ?? DEFAULT_ADMIN_INFO.departmentName,
       academicYear: settings?.defaultAcademicYear ?? DEFAULT_ADMIN_INFO.academicYear,
       grade,
@@ -206,6 +207,12 @@ export const ExamEditorPage: React.FC = () => {
   const [previewMode, setPreviewMode] = useState<PreviewMode>('exam');
   const [splitPercent, setSplitPercent] = useState(48);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchCount, setBatchCount] = useState(3);
+  const [batchStart, setBatchStart] = useState(101);
+  const [batchIds, setBatchIds] = useState<string[]>([]);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchError, setBatchError] = useState('');
   const [showTemplateBar, setShowTemplateBar] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [toast, setToast] = useState('');
@@ -483,7 +490,7 @@ export const ExamEditorPage: React.FC = () => {
           >
             {allExams.map((ex) => (
               <option key={ex.id} value={ex.id}>
-                {ex.adminInfo.title}
+                {ex.adminInfo.examCode} – {ex.adminInfo.title}
               </option>
             ))}
           </select>
@@ -521,6 +528,7 @@ export const ExamEditorPage: React.FC = () => {
             <Copy className="w-3.5 h-3.5" /> Nhân bản
           </button>
 
+          <button type="button" onClick={() => setBatchOpen(v => !v)} className="px-3 py-2 rounded-lg border border-teal-600 text-teal-700 font-semibold">Tạo nhiều đề</button>
           <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
             <button
               type="button"
@@ -664,6 +672,25 @@ export const ExamEditorPage: React.FC = () => {
       </div>
 
       {/* Inline Template Picker Strip (No Popup!) */}
+      {batchOpen && <section className="no-print bg-white border-b p-4 space-y-3">
+        <h2 className="font-bold">Tạo nhiều mã đề từ đề đang soạn</h2>
+        <p className="text-sm">Các bản sao có nội dung ban đầu giống nhau. Chỉnh sửa từng đề để tạo đề tương đương; không tự đảo câu đọc hiểu.</p>
+        <div className="flex flex-wrap items-end gap-3">
+          <label>Số lượng (1–50)<input className="block border rounded p-2 w-28" type="number" min={1} max={50} value={batchCount} onChange={e => setBatchCount(Number(e.target.value))}/></label>
+          <label>Mã bắt đầu<input className="block border rounded p-2 w-28" type="number" min={1} value={batchStart} onChange={e => setBatchStart(Number(e.target.value))}/></label>
+          <button disabled={batchBusy} className="bg-teal-700 text-white rounded px-4 py-2 disabled:opacity-50" onClick={async () => {
+            setBatchBusy(true); setBatchError('');
+            try { const copies = await createNumberedExams(exam, batchCount, batchStart); setBatchIds(copies.map(c => c.id)); setAllExams(await listExams()); notify(`Đã tạo ${copies.length} mã đề.`); } catch(e) { setBatchError(e instanceof Error ? e.message : 'Không thể tạo đề.'); } finally { setBatchBusy(false); }
+          }}>Tạo và lưu đề</button>
+          <button disabled={batchBusy || !batchIds.length} className="border rounded px-4 py-2 disabled:opacity-50" onClick={async () => {
+            setBatchBusy(true); setBatchError('');
+            try { const saved = await db.exams.bulkGet(batchIds); const copies = saved.filter((x): x is ExamDocument => !!x); if (copies.length !== batchIds.length) throw new Error('Một số đề đã bị xóa.'); await exportNumberedExamZip(copies, settings); } catch(e) { setBatchError(e instanceof Error ? e.message : 'Xuất hồ sơ thất bại.'); } finally { setBatchBusy(false); }
+          }}>Xuất ZIP các mã đề đã lưu</button>
+        </div>
+        {batchError && <p role="alert" className="text-red-700">{batchError}</p>}
+        <div className="flex flex-wrap gap-2">{allExams.filter(e => batchIds.includes(e.id)).sort((a,b) => Number(a.adminInfo.examCode)-Number(b.adminInfo.examCode)).map(e => <button key={e.id} className="border rounded px-3 py-1" onClick={() => {setSearchParams({examId:e.id}); resetExamHistory(e);}}>Mở đề {e.adminInfo.examCode}</button>)}</div>
+        <p className="text-xs text-slate-600">Bấm Lưu đề sau khi chỉnh sửa từng mã, trước khi xuất hàng loạt.</p>
+      </section>}
       {showTemplateBar && (
         <div className="no-print bg-slate-50 border-b border-[#E5E0D8] px-4 py-3">
           <div className="flex items-center justify-between mb-2">

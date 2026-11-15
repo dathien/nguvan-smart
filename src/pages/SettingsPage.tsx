@@ -19,7 +19,7 @@ export const SettingsPage: React.FC = () => {
 
   const [settings, setSettings] = useState<AppSettings>({
     id: 'default',
-    defaultSchoolName: '',
+    defaultSchoolName: 'TRƯỜNG THPT',
     defaultDepartmentName: 'TỔ NGỮ VĂN',
     defaultAcademicYear: '2025 - 2026',
     wordFontFamily: 'Times New Roman',

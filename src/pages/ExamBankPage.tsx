@@ -121,6 +121,13 @@ export const ExamBankPage: React.FC = () => {
         </div>
       </div>
 
+      <section className="no-print bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+        <h2 className="font-bold text-[#0F2942]">Đề thi tốt nghiệp THPT – nguồn tham khảo</h2>
+        <p className="text-sm">Đề chính thức năm 2026: đọc hiểu văn bản nghị luận về tri thức và công nghệ; đoạn nghị luận xã hội 200 chữ; bài nghị luận văn học 600 chữ với ngữ liệu thơ riêng.</p>
+        <a className="text-teal-700 underline" target="_blank" rel="noopener noreferrer" href="https://xaydungchinhsach.chinhphu.vn/thi-tot-nghiep-thpt-2026-de-thi-mon-ngu-van-11926061110312488.htm">Đề chính thức 2026 và hướng dẫn chấm, rubric – Cổng thông tin Chính phủ</a>
+        <p className="text-sm">Các dạng luyện tập: đọc hiểu thơ, truyện, kí, nghị luận, thông tin, kịch; đoạn nghị luận văn học kết hợp bài nghị luận xã hội hoặc ngược lại.</p>
+        <p className="text-xs text-slate-500">Nguồn tham khảo trực tuyến, chưa phải đề đã nhập vào kho offline. Giáo viên có thể nhập nội dung được phép sử dụng bằng chức năng Nhập đề từ Word.</p>
+      </section>
       {notice && (
         <div className="no-print bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2 text-xs text-emerald-800 flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" />
