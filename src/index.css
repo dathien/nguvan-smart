@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    color: #102438;
+    background-color: #FAF8F5;
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.font-a4 {
+  font-family: 'Times New Roman', 'Noto Serif', Georgia, serif;
+}
+
+/* Clean custom scrollbars for split workspaces */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(15, 41, 66, 0.18);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 41, 66, 0.32);
+}
+
+/* A4 Print-to-PDF Stylesheet */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 18mm 16mm 18mm 22mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 13pt !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .no-print,
+  aside,
+  nav,
+  header.app-topbar,
+  footer.app-footer {
+    display: none !important;
+  }
+
+  .print-only-container {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+  }
+
+  .print-only-container table {
+    width: 100%;
+    border-collapse: collapse;
+    page-break-inside: auto;
+  }
+
+  .print-only-container thead {
+    display: table-header-group;
+  }
+
+  .print-only-container tr,
+  .print-only-container .avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+}

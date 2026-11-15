@@ -1,0 +1,8 @@
+{
+  "name": "VĂN HỌC THÔNG MINH – SMART LITERATURE",
+  "description": "Hệ thống soạn giảng, kiểm tra, đánh giá và phát triển năng lực Ngữ văn THPT theo Chương trình GDPT 2018.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
