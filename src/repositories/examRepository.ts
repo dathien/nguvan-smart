@@ -125,3 +125,31 @@ export async function saveQuestion(q: ExamQuestion): Promise<ExamQuestion> {
 export async function deleteQuestion(id: string): Promise<void> {
   await db.questions.delete(id);
 }
+
+/** Independent editable copies; preserve the full question/answer relationship. */
+export async function createNumberedExams(exam: ExamDocument, count: number, start: number): Promise<ExamDocument[]> {
+  if (!Number.isInteger(count) || count < 1 || count > 50 || !Number.isSafeInteger(start) || start < 1 || start + count > 1000000) throw new Error('Nhập số lượng 1–50 và mã bắt đầu hợp lệ.');
+  await ensureDatabaseSeeded();
+  return db.transaction('rw', db.exams, async () => {
+    const existing = new Set((await db.exams.toArray()).map(e => e.adminInfo.examCode.trim()));
+    const now = new Date().toISOString();
+    const copies: ExamDocument[] = [];
+    for (let i = 0; i < count; i++) {
+      const code = String(start + i);
+      if (existing.has(code) || code === exam.adminInfo.examCode) throw new Error(`Mã đề ${code} đã tồn tại. Chọn mã bắt đầu khác.`);
+      const copy: ExamDocument = JSON.parse(JSON.stringify(exam));
+      copy.id = generateId('exam');
+      copy.adminInfo.examCode = code;
+      copy.passage.id = generateId('pass');
+      copy.readingQuestions.forEach(q => { q.id = generateId('q'); q.passageId = copy.passage.id; });
+      copy.writingPrompts.forEach(w => { w.id = generateId('w'); });
+      // Manual matrix rows can reference old question IDs; rebuild from the copied questions.
+      copy.matrixOverride = undefined;
+      copy.approved = false;
+      copy.createdAt = copy.updatedAt = now;
+      copies.push(copy);
+    }
+    await db.exams.bulkAdd(copies);
+    return copies;
+  });
+}
