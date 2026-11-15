@@ -161,9 +161,9 @@ export async function exportCompleteExamZip(
 
   const tasks: { name: string; run: () => Promise<Blob> }[] = [
     { name: 'De_kiem_tra.docx', run: () => generateExamDocxBlob(exam, settings) },
-    { name: 'Ma_tran.docx', run: () => generateMatrixDocxBlob(exam) },
-    { name: 'Ban_dac_ta.docx', run: () => generateSpecificationDocxBlob(exam) },
-    { name: 'Huong_dan_cham.docx', run: () => generateGradingGuideDocxBlob(exam) },
+    { name: 'Ma_tran.docx', run: () => generateMatrixDocxBlob(exam, settings) },
+    { name: 'Ban_dac_ta.docx', run: () => generateSpecificationDocxBlob(exam, settings) },
+    { name: 'Huong_dan_cham.docx', run: () => generateGradingGuideDocxBlob(exam, settings) },
   ];
 
   for (const t of tasks) {

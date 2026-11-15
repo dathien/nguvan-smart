@@ -1,3 +1,4 @@
+import { db } from '../database/db';
 import {
   AlignmentType,
   BorderStyle,
@@ -26,6 +27,11 @@ const BORDER_STYLE = {
   right: { style: BorderStyle.SINGLE, size: 6, color: '1E293B' },
 };
 
+function pageMargins(settings?: AppSettings) {
+  const m = settings?.wordMarginsMm ?? {top:20,bottom:20,left:25,right:15};
+  return {top:Math.round(m.top*56.693),bottom:Math.round(m.bottom*56.693),left:Math.round(m.left*56.693),right:Math.round(m.right*56.693)};
+}
+
 function getFontConfig(settings?: AppSettings) {
   return {
     font: settings?.wordFontFamily || 'Times New Roman',
@@ -45,6 +51,7 @@ function makePara(
     indentLeft?: number;
     font?: string;
     size?: number;
+    line?: number;
   }
 ): Paragraph {
   return new Paragraph({
@@ -52,7 +59,7 @@ function makePara(
     spacing: {
       before: options?.spaceBefore ?? 60,
       after: options?.spaceAfter ?? 80,
-      line: 300,
+      line: options?.line ?? 324,
     },
     indent: options?.indentLeft ? { left: options.indentLeft } : undefined,
     children: [
@@ -101,7 +108,9 @@ function makeCell(
   });
 }
 
-function buildAdminHeaderTable(exam: ExamDocument, subtitle: string): Table {
+function buildAdminHeaderTable(exam: ExamDocument, subtitle: string, settings?: AppSettings): Table {
+  const cfg = getFontConfig(settings);
+  const para = (text: string, options?: Parameters<typeof makePara>[1]) => makePara(text, {...options, font:cfg.font, size:cfg.size, line:cfg.line});
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
@@ -114,19 +123,19 @@ function buildAdminHeaderTable(exam: ExamDocument, subtitle: string): Table {
               left: { style: BorderStyle.NONE },
               right: { style: BorderStyle.NONE },
             },
-            width: { size: 46, type: WidthType.PERCENTAGE },
+            width: { size: 40, type: WidthType.PERCENTAGE },
             children: [
-              makePara(exam.adminInfo.schoolName.toUpperCase(), {
+              para(exam.adminInfo.schoolName.toUpperCase(), {
                 bold: true,
                 align: AlignmentType.CENTER,
                 size: 24,
               }),
-              makePara(exam.adminInfo.departmentName.toUpperCase(), {
+              para(exam.adminInfo.departmentName.toUpperCase(), {
                 bold: true,
                 align: AlignmentType.CENTER,
                 size: 24,
               }),
-              makePara(`Mã đề: ${exam.adminInfo.examCode}`, {
+              para(exam.adminInfo.examCode ? `Mã đề: ${exam.adminInfo.examCode}` : "", {
                 italic: true,
                 align: AlignmentType.CENTER,
                 size: 22,
@@ -140,18 +149,18 @@ function buildAdminHeaderTable(exam: ExamDocument, subtitle: string): Table {
               left: { style: BorderStyle.NONE },
               right: { style: BorderStyle.NONE },
             },
-            width: { size: 54, type: WidthType.PERCENTAGE },
+            width: { size: 60, type: WidthType.PERCENTAGE },
             children: [
-              makePara(subtitle.toUpperCase(), {
+              para(subtitle.toUpperCase(), {
                 bold: true,
                 align: AlignmentType.CENTER,
                 size: 24,
               }),
-              makePara(
+              para(
                 `Môn: NGỮ VĂN – Lớp ${exam.adminInfo.grade} (${exam.adminInfo.semester}, ${exam.adminInfo.academicYear})`,
                 { bold: true, align: AlignmentType.CENTER, size: 24 }
               ),
-              makePara(
+              para(
                 `Thời gian làm bài: ${exam.adminInfo.durationMinutes} phút (không kể thời gian phát đề)`,
                 { italic: true, align: AlignmentType.CENTER, size: 22 }
               ),
@@ -167,16 +176,19 @@ export async function generateExamDocxBlob(
   exam: ExamDocument,
   settings?: AppSettings
 ): Promise<Blob> {
+  settings ??= await db.settings.get("default");
+  const cfg = getFontConfig(settings);
+  const para = (text: string, options?: Parameters<typeof makePara>[1]) => makePara(text, {...options, font:cfg.font, size:options?.size ?? cfg.size, line:cfg.line});
   const fontCfg = getFontConfig(settings);
   const sync = buildSynchronizedExamData(exam);
   const children: (Paragraph | Table)[] = [
-    buildAdminHeaderTable(exam, exam.adminInfo.title),
-    makePara('', { spaceAfter: 80 }),
+    buildAdminHeaderTable(exam, exam.adminInfo.title, settings),
+    para('', { spaceAfter: 80 }),
   ];
 
   if (exam.isPracticeSample && exam.sampleNotice) {
     children.push(
-      makePara(`[Lưu ý: ${exam.sampleNotice}]`, {
+      para(`[Lưu ý: ${exam.sampleNotice}]`, {
         italic: true,
         size: 22,
         font: fontCfg.font,
@@ -186,13 +198,13 @@ export async function generateExamDocxBlob(
 
   if (exam.readingQuestions.length > 0) {
     children.push(
-      makePara(
+      para(
         `I. ĐỌC HIỂU (${formatScore(sync.readingTotal)} điểm)`,
         { bold: true, size: fontCfg.size, font: fontCfg.font, spaceBefore: 120 }
       )
     );
     children.push(
-      makePara('Đọc văn bản sau và thực hiện các yêu cầu:', {
+      para('Đọc văn bản sau và thực hiện các yêu cầu:', {
         italic: true,
         size: fontCfg.size,
         font: fontCfg.font,
@@ -200,7 +212,7 @@ export async function generateExamDocxBlob(
     );
     if (exam.passage.title) {
       children.push(
-        makePara(exam.passage.title.toUpperCase(), {
+        para(exam.passage.title.toUpperCase(), {
           bold: true,
           align: AlignmentType.CENTER,
           size: fontCfg.size,
@@ -211,7 +223,7 @@ export async function generateExamDocxBlob(
     const lines = exam.passage.content.split('\n');
     lines.forEach((line) => {
       children.push(
-        makePara(line, {
+        para(line, {
           align:
             exam.passage.formatStyle === 'poem'
               ? AlignmentType.LEFT
@@ -225,7 +237,7 @@ export async function generateExamDocxBlob(
       );
     });
     children.push(
-      makePara(
+      para(
         `(Theo ${exam.passage.author} – ${exam.passage.citationSource}${exam.passage.publishYear ? `, ${exam.passage.publishYear}` : ''})`,
         {
           italic: true,
@@ -238,7 +250,7 @@ export async function generateExamDocxBlob(
 
     exam.readingQuestions.forEach((q, idx) => {
       children.push(
-        makePara(
+        para(
           `Câu ${idx + 1} (${formatScore(q.points)} điểm). ${q.content}`,
           {
             size: fontCfg.size,
@@ -252,14 +264,14 @@ export async function generateExamDocxBlob(
 
   if (exam.writingPrompts.length > 0) {
     children.push(
-      makePara(
+      para(
         `II. VIẾT (${formatScore(sync.writingTotal)} điểm)`,
         { bold: true, size: fontCfg.size, font: fontCfg.font, spaceBefore: 180 }
       )
     );
     exam.writingPrompts.forEach((wp, idx) => {
       children.push(
-        makePara(
+        para(
           `Câu ${idx + 1} (${formatScore(wp.points)} điểm). ${wp.promptText}`,
           {
             size: fontCfg.size,
@@ -272,7 +284,7 @@ export async function generateExamDocxBlob(
   }
 
   children.push(
-    makePara('--- HẾT ---', {
+    para('--- HẾT ---', {
       bold: true,
       align: AlignmentType.CENTER,
       spaceBefore: 200,
@@ -283,7 +295,7 @@ export async function generateExamDocxBlob(
 
   if (exam.adminInfo.extraNotes) {
     children.push(
-      makePara(exam.adminInfo.extraNotes, {
+      para(exam.adminInfo.extraNotes, {
         italic: true,
         align: AlignmentType.CENTER,
         font: fontCfg.font,
@@ -298,7 +310,7 @@ export async function generateExamDocxBlob(
         properties: {
           page: {
             size: { width: 11906, height: 16838 }, // A4
-            margin: { top: 1134, bottom: 1134, left: 1417, right: 964 },
+            margin: pageMargins(settings),
           },
         },
         children,
@@ -309,7 +321,10 @@ export async function generateExamDocxBlob(
   return Packer.toBlob(doc);
 }
 
-export async function generateMatrixDocxBlob(exam: ExamDocument): Promise<Blob> {
+export async function generateMatrixDocxBlob(exam: ExamDocument, settings?: AppSettings): Promise<Blob> {
+  settings ??= await db.settings.get("default");
+  const cfg = getFontConfig(settings);
+  const para = (text: string, options?: Parameters<typeof makePara>[1]) => makePara(text, {...options, font:cfg.font, size:options?.size ?? cfg.size, line:cfg.line});
   const sync = buildSynchronizedExamData(exam);
   const rows = exam.matrixOverride?.enabled
     ? exam.matrixOverride.rows
@@ -386,16 +401,17 @@ export async function generateMatrixDocxBlob(exam: ExamDocument): Promise<Blob> 
         properties: {
           page: {
             size: { width: 16838, height: 11906 }, // A4 Landscape for wide matrix
-            margin: { top: 964, bottom: 964, left: 1134, right: 964 },
+            margin: pageMargins(settings),
           },
         },
         children: [
-          makePara('MA TRẬN ĐỀ KIỂM TRA ĐỊNH KÌ / ÔN TẬP MÔN NGỮ VĂN', {
+          para(`${exam.adminInfo.schoolName} · ${exam.adminInfo.departmentName}`, {bold:true, align:AlignmentType.CENTER}),
+          para('MA TRẬN ĐỀ KIỂM TRA ĐỊNH KÌ / ÔN TẬP MÔN NGỮ VĂN', {
             bold: true,
             align: AlignmentType.CENTER,
             size: 28,
           }),
-          makePara(
+          para(
             `${exam.adminInfo.title} – Lớp ${exam.adminInfo.grade} (${exam.adminInfo.textbookSeries})`,
             { italic: true, align: AlignmentType.CENTER, size: 24 }
           ),
@@ -411,7 +427,10 @@ export async function generateMatrixDocxBlob(exam: ExamDocument): Promise<Blob> 
   return Packer.toBlob(doc);
 }
 
-export async function generateSpecificationDocxBlob(exam: ExamDocument): Promise<Blob> {
+export async function generateSpecificationDocxBlob(exam: ExamDocument, settings?: AppSettings): Promise<Blob> {
+  settings ??= await db.settings.get("default");
+  const cfg = getFontConfig(settings);
+  const para = (text: string, options?: Parameters<typeof makePara>[1]) => makePara(text, {...options, font:cfg.font, size:options?.size ?? cfg.size, line:cfg.line});
   const sync = buildSynchronizedExamData(exam);
 
   const headerRow = new TableRow({
@@ -452,16 +471,17 @@ export async function generateSpecificationDocxBlob(exam: ExamDocument): Promise
         properties: {
           page: {
             size: { width: 16838, height: 11906 }, // A4 Landscape
-            margin: { top: 964, bottom: 964, left: 1134, right: 964 },
+            margin: pageMargins(settings),
           },
         },
         children: [
-          makePara('BẢN ĐẶC TẢ ĐỀ KIỂM TRA MÔN NGỮ VĂN', {
+          para(`${exam.adminInfo.schoolName} · ${exam.adminInfo.departmentName}`, {bold:true, align:AlignmentType.CENTER}),
+          para('BẢN ĐẶC TẢ ĐỀ KIỂM TRA MÔN NGỮ VĂN', {
             bold: true,
             align: AlignmentType.CENTER,
             size: 28,
           }),
-          makePara(
+          para(
             `${exam.adminInfo.title} – Lớp ${exam.adminInfo.grade} (${exam.adminInfo.textbookSeries})`,
             { italic: true, align: AlignmentType.CENTER, size: 24 }
           ),
@@ -477,16 +497,19 @@ export async function generateSpecificationDocxBlob(exam: ExamDocument): Promise
   return Packer.toBlob(doc);
 }
 
-export async function generateGradingGuideDocxBlob(exam: ExamDocument): Promise<Blob> {
+export async function generateGradingGuideDocxBlob(exam: ExamDocument, settings?: AppSettings): Promise<Blob> {
+  settings ??= await db.settings.get("default");
+  const cfg = getFontConfig(settings);
+  const para = (text: string, options?: Parameters<typeof makePara>[1]) => makePara(text, {...options, font:cfg.font, size:options?.size ?? cfg.size, line:cfg.line});
   const sync = buildSynchronizedExamData(exam);
   const children: (Paragraph | Table)[] = [
-    buildAdminHeaderTable(exam, 'HƯỚNG DẪN CHẤM VÀ BIỂU ĐIỂM'),
-    makePara('', { spaceAfter: 80 }),
+    buildAdminHeaderTable(exam, 'HƯỚNG DẪN CHẤM VÀ BIỂU ĐIỂM', settings),
+    para('', { spaceAfter: 80 }),
   ];
 
   if (exam.readingQuestions.length > 0) {
     children.push(
-      makePara(`PHẦN I. ĐỌC HIỂU (${formatScore(sync.readingTotal)} điểm)`, {
+      para(`PHẦN I. ĐỌC HIỂU (${formatScore(sync.readingTotal)} điểm)`, {
         bold: true,
         size: 26,
       })
@@ -539,7 +562,7 @@ export async function generateGradingGuideDocxBlob(exam: ExamDocument): Promise<
 
   if (exam.writingPrompts.length > 0) {
     children.push(
-      makePara(`PHẦN II. VIẾT (${formatScore(sync.writingTotal)} điểm)`, {
+      para(`PHẦN II. VIẾT (${formatScore(sync.writingTotal)} điểm)`, {
         bold: true,
         size: 26,
         spaceBefore: 180,
@@ -548,7 +571,7 @@ export async function generateGradingGuideDocxBlob(exam: ExamDocument): Promise<
 
     exam.writingPrompts.forEach((wp, idx) => {
       children.push(
-        makePara(
+        para(
           `Câu ${idx + 1} (${formatScore(wp.points)} điểm) – ${wp.category} (${wp.formatType} ~${wp.wordCountTarget} chữ)`,
           { bold: true, spaceBefore: 100 }
         )
@@ -586,7 +609,7 @@ export async function generateGradingGuideDocxBlob(exam: ExamDocument): Promise<
         properties: {
           page: {
             size: { width: 11906, height: 16838 },
-            margin: { top: 1134, bottom: 1134, left: 1417, right: 964 },
+            margin: pageMargins(settings),
           },
         },
         children,
