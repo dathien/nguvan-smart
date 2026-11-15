@@ -81,7 +81,7 @@ ${
        <p><em>Đọc văn bản sau và thực hiện các yêu cầu:</em></p>
        ${exam.passage.title ? `<p style="text-align:center;font-weight:bold">${escapeHtml(exam.passage.title.toUpperCase())}</p>` : ''}
        ${passageLines}
-       <p style="text-align:right;font-style:italic">(Theo ${escapeHtml(exam.passage.author)} – ${escapeHtml(exam.passage.citationSource)})</p>
+       ${exam.passage.verificationStatus !== 'Ngữ liệu tự biên soạn' && (exam.passage.author || exam.passage.citationSource) ? `<p style="text-align:right;font-style:italic">(Theo ${escapeHtml(exam.passage.author)} – ${escapeHtml(exam.passage.citationSource)})</p>` : ''}
        ${exam.readingQuestions
          .map(
            (q, i) =>

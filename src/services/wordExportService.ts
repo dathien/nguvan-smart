@@ -236,17 +236,19 @@ export async function generateExamDocxBlob(
         })
       );
     });
-    children.push(
-      para(
-        `(Theo ${exam.passage.author} – ${exam.passage.citationSource}${exam.passage.publishYear ? `, ${exam.passage.publishYear}` : ''})`,
-        {
-          italic: true,
-          align: AlignmentType.RIGHT,
-          size: fontCfg.size - 2,
-          font: fontCfg.font,
-        }
-      )
-    );
+    if (exam.passage.verificationStatus !== 'Ngữ liệu tự biên soạn' && (exam.passage.author || exam.passage.citationSource)) {
+      children.push(
+        para(
+          `(Theo ${exam.passage.author} – ${exam.passage.citationSource}${exam.passage.publishYear ? `, ${exam.passage.publishYear}` : ''})`,
+          {
+            italic: true,
+            align: AlignmentType.RIGHT,
+            size: fontCfg.size - 2,
+            font: fontCfg.font,
+          }
+        )
+      );
+    }
 
     exam.readingQuestions.forEach((q, idx) => {
       children.push(
