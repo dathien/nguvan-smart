@@ -175,7 +175,7 @@ export const SEED_EXAM: ExamDocument = {
   id: 'exam-practice-thpt-01',
   ownerId: 'teacher-dathien',
   adminInfo: {
-    schoolName: 'TRƯỜNG THPT THỰC HÀNH SMART LITERATURE',
+    schoolName: 'TRƯỜNG THPT',
     departmentName: 'TỔ NGỮ VĂN',
     academicYear: '2025 - 2026',
     semester: 'Học kỳ II',
@@ -466,11 +466,16 @@ let seedPromise: Promise<void> | null = null;
 export async function ensureDatabaseSeeded(): Promise<void> {
   if (seedPromise) return seedPromise;
   seedPromise = (async () => {
+    // Migrate only the old placeholder name; preserve real school names.
+    const isOldSchool = (name: string) => /^(TRƯỜNG THPT THỰC HÀNH SMART LITERATURE|TRƯỜNG THPT MẪU GDPT 2018)$/i.test(name.trim());
+    await db.exams.toCollection().modify(e => { if (isOldSchool(e.adminInfo.schoolName)) e.adminInfo.schoolName = 'TRƯỜNG THPT'; });
+    await db.settings.toCollection().modify(e => { if (!e.defaultSchoolName.trim() || isOldSchool(e.defaultSchoolName)) e.defaultSchoolName = 'TRƯỜNG THPT'; });
+    await db.users.toCollection().modify(e => { if (e.schoolName && isOldSchool(e.schoolName)) e.schoolName = 'TRƯỜNG THPT'; });
     const settingsCount = await db.settings.count();
     if (settingsCount === 0) {
       await db.settings.put({
         id: 'default',
-        defaultSchoolName: '',
+        defaultSchoolName: 'TRƯỜNG THPT',
         defaultDepartmentName: 'TỔ NGỮ VĂN',
         defaultAcademicYear: '2025 - 2026',
         wordFontFamily: 'Times New Roman',
@@ -489,7 +494,7 @@ export async function ensureDatabaseSeeded(): Promise<void> {
           email: 'dathien2412@gmail.com',
           roles: ['admin', 'teacher'],
           activeRole: 'teacher',
-          schoolName: 'Trường THPT Thực hành Smart Literature',
+          schoolName: 'TRƯỜNG THPT',
           department: 'Tổ Ngữ văn',
           gradeFocus: '12',
           status: 'active',
@@ -502,7 +507,7 @@ export async function ensureDatabaseSeeded(): Promise<void> {
           email: 'minhan.12a1@student.local',
           roles: ['student'],
           activeRole: 'student',
-          schoolName: 'Trường THPT Thực hành Smart Literature',
+          schoolName: 'TRƯỜNG THPT',
           department: 'Lớp 12A1',
           gradeFocus: '12',
           status: 'active',
