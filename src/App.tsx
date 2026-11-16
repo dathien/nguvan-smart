@@ -19,6 +19,7 @@ import { ExamEditorPage } from './pages/ExamEditorPage';
 import { ExamPracticePage } from './pages/ExamPracticePage';
 import { GamesPage } from './pages/GamesPage';
 import { GradingPage } from './pages/GradingPage';
+import { HelpPage } from './pages/HelpPage';
 import { HomePage } from './pages/HomePage';
 import { LessonPlanPage } from './pages/LessonPlanPage';
 import { MatrixSpecPage } from './pages/MatrixSpecPage';
@@ -146,6 +147,7 @@ export default function App() {
               />
             }
           />
+          <Route path="/huong-dan-su-dung" element={<HelpPage />} />
           <Route path="/cai-dat" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
