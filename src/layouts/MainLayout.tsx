@@ -53,6 +53,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: '/', label: 'Trang chủ', icon: Home },
       { path: '/tong-quan', label: 'Tổng quan', icon: LayoutDashboard },
+      { path: '/huong-dan-su-dung', label: 'Hướng dẫn sử dụng', icon: BookOpen },
     ],
   },
   {
@@ -224,6 +225,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
 
         {/* Right Primary Action / Workspace Role Switcher */}
         <div className="flex items-center gap-2.5 shrink-0">
+          <Link to="/huong-dan-su-dung" aria-label="Hướng dẫn sử dụng" title="Hướng dẫn sử dụng" className="inline-flex items-center gap-1 rounded-lg border border-teal-700/30 px-2 py-2 text-teal-800 hover:bg-teal-50"><BookOpen className="w-4 h-4"/><span className="hidden xl:inline text-sm font-semibold">Hướng dẫn</span></Link>
           {!isOnline && (
             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md whitespace-nowrap">
               <WifiOff className="w-3.5 h-3.5" />
