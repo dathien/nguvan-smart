@@ -129,6 +129,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showIOSGuide, setShowIOSGuide] = useState(false);
+  const [topMenuOpen, setTopMenuOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     overview: true,
     assessment: true,
@@ -153,8 +154,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF8F5] text-[#102438]">
       {/* Clean Top Bar (3-zone contract) */}
-      <header className="app-topbar no-print sticky top-0 z-40 h-14 bg-white/95 backdrop-blur border-b border-[#E5E0D8] px-4 lg:px-6 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 shrink-0">
+      <header className="app-topbar no-print sticky top-0 z-40 min-h-14 bg-white/95 backdrop-blur border-b border-[#E5E0D8] px-2 sm:px-3 flex items-center justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-1 min-w-0">
           {!isLanding && (
             <button
               type="button"
@@ -173,21 +174,21 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
           )}
           <Link
             to="/"
-            className="font-serif text-lg font-bold tracking-tight text-[#0F2942] whitespace-nowrap shrink-0"
+            className="text-sm sm:text-base font-bold tracking-tight text-[#0F2942] truncate min-w-0"
           >
-            Văn Học Thông Minh
+            Ngữ Văn Thông Minh
           </Link>
         </div>
 
         {/* Center concise links */}
-        <nav className="hidden md:flex items-center gap-6 text-[13px] font-medium text-slate-600">
+        <nav className="hidden 2xl:flex items-center gap-2 text-[13px] font-medium text-slate-600">
           <Link
             to="/soan-de"
             className={`hover:text-[#0F2942] transition-colors whitespace-nowrap shrink-0 ${
               location.pathname === '/soan-de' ? 'text-[#0F2942] font-semibold' : ''
             }`}
           >
-            Soạn đề thông minh
+            Soạn đề
           </Link>
           <Link
             to="/ma-tran-dac-ta"
@@ -224,12 +225,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         </nav>
 
         {/* Right Primary Action / Workspace Role Switcher */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          <Link to="/huong-dan-su-dung" aria-label="Hướng dẫn sử dụng" title="Hướng dẫn sử dụng" className="inline-flex items-center gap-1 rounded-lg border border-teal-700/30 px-2 py-2 text-teal-800 hover:bg-teal-50"><BookOpen className="w-4 h-4"/><span className="hidden xl:inline text-sm font-semibold">Hướng dẫn</span></Link>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Link to="/huong-dan-su-dung" aria-label="Hướng dẫn sử dụng" title="Hướng dẫn sử dụng" className="inline-flex items-center gap-1 rounded-lg border border-teal-700/30 px-2 py-2 text-teal-800 hover:bg-teal-50"><BookOpen className="w-4 h-4"/><span className="hidden 2xl:inline text-sm font-semibold">Hướng dẫn</span></Link>
           {!isOnline && (
             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md whitespace-nowrap">
               <WifiOff className="w-3.5 h-3.5" />
-              Ngoại tuyến
+              <span className="hidden sm:inline">Ngoại tuyến</span>
             </span>
           )}
 
@@ -237,7 +238,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
             <button
               type="button"
               onClick={install}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#0D7A6F]/30 text-[#0D7A6F] text-xs font-medium hover:bg-[#0D7A6F]/5 transition-colors whitespace-nowrap shrink-0"
+              className="hidden 2xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#0D7A6F]/30 text-[#0D7A6F] text-xs font-medium hover:bg-[#0D7A6F]/5 transition-colors whitespace-nowrap shrink-0"
             >
               <Download className="w-3.5 h-3.5" />
               Cài đặt ứng dụng
@@ -247,14 +248,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
             <button
               type="button"
               onClick={() => setShowIOSGuide(true)}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-xs font-medium hover:bg-slate-50 whitespace-nowrap shrink-0"
+              className="hidden 2xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-xs font-medium hover:bg-slate-50 whitespace-nowrap shrink-0"
             >
               Cài trên iOS
             </button>
           )}
 
           {activeUser.roles.length > 1 && (
-            <div className="hidden sm:flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+            <div className="hidden 2xl:flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
               {activeUser.roles.map((r) => (
                 <button
                   key={r}
@@ -281,11 +282,21 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
           <button
             type="button"
             onClick={() => navigate('/soan-de')}
-            className="px-3.5 py-1.5 rounded-lg bg-[#0F2942] text-white text-xs font-semibold hover:bg-[#173B5E] transition-colors whitespace-nowrap shrink-0"
+            className="hidden md:inline-flex px-2.5 py-1.5 rounded-lg bg-[#0F2942] text-white text-xs font-semibold hover:bg-[#173B5E] transition-colors whitespace-nowrap shrink-0"
           >
             Soạn đề mới
           </button>
+          <button type="button" aria-expanded={topMenuOpen} aria-controls="compact-top-menu" onClick={() => setTopMenuOpen(v => !v)} className="2xl:hidden inline-flex items-center gap-1 p-2 rounded-lg border border-slate-200 text-sm whitespace-nowrap" title="Menu chức năng"><Menu className="w-4 h-4"/><span className="hidden sm:inline">Menu</span></button>
         </div>
+        {topMenuOpen && (
+          <div id="compact-top-menu" className="2xl:hidden absolute top-full right-2 left-2 sm:left-auto sm:w-72 max-h-[75vh] overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-50">
+            {[{path:'/soan-de',label:'Soạn đề thông minh'},{path:'/ma-tran-dac-ta',label:'Ma trận & Đặc tả'},{path:'/ngan-hang-ngu-lieu',label:'Ngữ liệu'},{path:'/bai-giang',label:'Bài giảng'},{path:'/luyen-thi-thpt',label:'Luyện thi THPT'},{path:'/huong-dan-su-dung',label:'Hướng dẫn sử dụng'}].map(item => <Link key={item.path} to={item.path} onClick={() => setTopMenuOpen(false)} className="block px-3 py-2 rounded hover:bg-slate-100 text-sm">{item.label}</Link>)}
+            {!isInstalled && isInstallable && <button type="button" onClick={() => { setTopMenuOpen(false); install(); }} className="block w-full text-left px-3 py-2 text-sm">Cài đặt ứng dụng</button>}
+            {!isInstalled && !isInstallable && isIOS && <button type="button" onClick={() => { setTopMenuOpen(false); setShowIOSGuide(true); }} className="block w-full text-left px-3 py-2 text-sm">Cài trên iOS</button>}
+            {activeUser.roles.length > 1 && activeUser.roles.map(r => <button key={r} type="button" onClick={() => { onSwitchRole(r); setTopMenuOpen(false); }} className={`block w-full text-left px-3 py-2 rounded text-sm ${activeUser.activeRole === r ? 'bg-slate-100 font-semibold' : ''}`}>{roleLabels[r]}</button>)}
+            <button type="button" onClick={() => { navigate('/soan-de'); setTopMenuOpen(false); }} className="block w-full text-left px-3 py-2 rounded bg-[#0F2942] text-white text-sm">Soạn đề mới</button>
+          </div>
+        )}
       </header>
 
       <div className="flex-1 flex min-h-0 relative">
