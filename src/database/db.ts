@@ -64,7 +64,7 @@ export const SEED_PASSAGES: ReadingPassage[] = [
   {
     id: 'passage-practice-12-poem',
     title: 'Nhịp cầu qua mùa gió',
-    author: 'Hồ Nguyễn Đa Thiện (Ngữ liệu thực hành tự biên soạn)',
+    author: '',
     genre: 'Thơ',
     grade: '12',
     textbookSeries: 'Kết nối tri thức với cuộc sống',
@@ -106,7 +106,7 @@ Một nhịp cầu thương nhớ của quê nhà.`,
   {
     id: 'passage-practice-10-story',
     title: 'Người thắp đèn ở ga xép',
-    author: 'Ngữ liệu thực hành tự biên soạn (Văn Học Thông Minh)',
+    author: '',
     genre: 'Truyện',
     grade: '10',
     textbookSeries: 'Chân trời sáng tạo',
@@ -139,7 +139,7 @@ Khi chuyến tàu chậm rãi lăn bánh an toàn qua ga xép, ánh đèn từ t
   {
     id: 'passage-practice-11-argument',
     title: 'Đọc chậm giữa thời đại tốc độ',
-    author: 'Ngữ liệu thực hành tự biên soạn (Văn Học Thông Minh)',
+    author: '',
     genre: 'Văn bản nghị luận',
     grade: '11',
     textbookSeries: 'Cánh Diều',
@@ -471,6 +471,12 @@ export async function ensureDatabaseSeeded(): Promise<void> {
     await db.exams.toCollection().modify(e => { if (isOldSchool(e.adminInfo.schoolName)) e.adminInfo.schoolName = 'TRƯỜNG THPT'; });
     await db.settings.toCollection().modify(e => { if (!e.defaultSchoolName.trim() || isOldSchool(e.defaultSchoolName)) e.defaultSchoolName = 'TRƯỜNG THPT'; });
     await db.users.toCollection().modify(e => { if (e.schoolName && isOldSchool(e.schoolName)) e.schoolName = 'TRƯỜNG THPT'; });
+    // Correct only the known erroneous built-in attribution, including saved copies.
+    const clearFalseAuthor = (p: ReadingPassage) => {
+      if (p && p.id === 'passage-practice-12-poem' && p.author === 'Hồ Nguyễn Đa Thiện (Ngữ liệu thực hành tự biên soạn)') p.author = '';
+    };
+    await db.passages.toCollection().modify(clearFalseAuthor);
+    await db.exams.toCollection().modify(e => { if (e.passage) clearFalseAuthor(e.passage); });
     const settingsCount = await db.settings.count();
     if (settingsCount === 0) {
       await db.settings.put({
