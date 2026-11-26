@@ -19,6 +19,7 @@ import { ExamEditorPage } from './pages/ExamEditorPage';
 import { ExamPracticePage } from './pages/ExamPracticePage';
 import { GamesPage } from './pages/GamesPage';
 import { GradingPage } from './pages/GradingPage';
+import { LiteratureExplorePage } from './pages/LiteratureExplorePage';
 import { HelpPage } from './pages/HelpPage';
 import { HomePage } from './pages/HomePage';
 import { LessonPlanPage } from './pages/LessonPlanPage';
@@ -147,6 +148,7 @@ export default function App() {
               />
             }
           />
+          <Route path="/kham-pha-ngu-van" element={<LiteratureExplorePage />} />
           <Route path="/huong-dan-su-dung" element={<HelpPage />} />
           <Route path="/cai-dat" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
