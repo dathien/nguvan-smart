@@ -66,7 +66,7 @@ function makePara(
       new TextRun({
         text,
         bold: options?.bold,
-        italic: options?.italic,
+        italics: options?.italic,
         font: options?.font ?? 'Times New Roman',
         size: options?.size ?? 26,
       }),

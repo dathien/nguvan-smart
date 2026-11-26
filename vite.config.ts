@@ -14,10 +14,10 @@ export default defineConfig(() => {
         includeAssets: ['icon.svg', 'apple-touch-icon.png'],
         manifest: {
           id: '/',
-          name: 'Văn Học Thông Minh – Smart Literature',
-          short_name: 'SmartLit',
+          name: 'Ngữ Văn Thông Minh – Smart Literature',
+          short_name: 'Ngữ Văn TM',
           description:
-            'Hệ thống soạn giảng, kiểm tra, đánh giá và phát triển năng lực Ngữ văn THPT theo Chương trình GDPT 2018.',
+            'Hệ thống soạn giảng, kiểm tra, đánh giá và Khám phá Ngữ văn 2D/3D THPT theo Chương trình GDPT 2018.',
           theme_color: '#0F2942',
           background_color: '#FAF8F5',
           display: 'standalone',
@@ -86,11 +86,12 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
       },
     },
     server: {
-      hmr: process.env.DISABLE_HMR !== 'true',
+      ws: false as const,
+      hmr: false,
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };

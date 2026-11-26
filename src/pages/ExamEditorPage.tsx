@@ -429,7 +429,10 @@ export const ExamEditorPage: React.FC = () => {
     });
   };
 
-  const jumpToIssue = (tab: EditorTab, elementId?: string) => {
+  const jumpToIssue = (
+    tab: EditorTab | 'matrix' | 'spec' | 'rubric',
+    elementId?: string
+  ) => {
     setEditorTab(
       tab === 'matrix' || tab === 'spec'
         ? 'validate'

@@ -16,6 +16,10 @@ import {
   WorksheetDocument,
   WritingDraftSession,
 } from '../types';
+import {
+  SimulationOfflinePack,
+  SimulationProgressRecord,
+} from '../features/simulations/types';
 
 export class SmartLiteratureDB extends Dexie {
   passages!: Table<ReadingPassage, string>;
@@ -33,6 +37,8 @@ export class SmartLiteratureDB extends Dexie {
   writingDrafts!: Table<WritingDraftSession, string>;
   users!: Table<UserProfile, string>;
   settings!: Table<AppSettings, string>;
+  simulationProgress!: Table<SimulationProgressRecord, string>;
+  simulationOfflinePacks!: Table<SimulationOfflinePack, string>;
 
   constructor() {
     super('SmartLiteratureDB');
@@ -53,6 +59,26 @@ export class SmartLiteratureDB extends Dexie {
       users: 'id, email, activeRole, status',
       settings: 'id',
     });
+
+    this.version(2).stores({
+      passages: 'id, genre, grade, textbookSeries, verificationStatus, isFavorite, ownerId, updatedAt',
+      questions: 'id, passageId, cognitiveLevel, grade, genre, ownerId, updatedAt',
+      exams: 'id, ownerId, updatedAt, approved',
+      examVersions: 'id, examId, createdAt',
+      lessonPlans: 'id, ownerId, grade, textbookSeries, updatedAt',
+      presentations: 'id, ownerId, grade, sourceExamId, updatedAt',
+      mindMaps: 'id, ownerId, category, grade, updatedAt',
+      worksheets: 'id, ownerId, worksheetType, grade, updatedAt',
+      classes: 'id, ownerId, grade, joinCode, archived',
+      students: 'id, classId, studentCode, ownerId',
+      assignments: 'id, ownerId, classId, kind, dueAt',
+      submissions: 'id, assignmentId, classId, studentId, status, updatedAt',
+      writingDrafts: 'id, studentId, updatedAt',
+      users: 'id, email, activeRole, status',
+      settings: 'id',
+      simulationProgress: 'simId, updatedAt, favorite',
+      simulationOfflinePacks: 'simId, group, downloadedAt',
+    });
   }
 }
 
@@ -64,7 +90,7 @@ export const SEED_PASSAGES: ReadingPassage[] = [
   {
     id: 'passage-practice-12-poem',
     title: 'Nhịp cầu qua mùa gió',
-    author: '',
+    author: 'Hồ Nguyễn Đa Thiện (Ngữ liệu thực hành tự biên soạn)',
     genre: 'Thơ',
     grade: '12',
     textbookSeries: 'Kết nối tri thức với cuộc sống',
@@ -87,7 +113,7 @@ Xin giữ lại trong hành trang lặng thầm nhất
 Một nhịp cầu thương nhớ của quê nhà.`,
     formatStyle: 'poem',
     origin: 'Ngữ liệu thực hành nội bộ phục vụ kiểm thử quy trình soạn đề',
-    citationSource: 'Tư liệu tự biên soạn dùng thử nghiệm trong hệ thống Văn Học Thông Minh (2026)',
+    citationSource: 'Tư liệu tự biên soạn dùng thử nghiệm trong hệ thống Ngữ Văn Thông Minh (2026)',
     publisher: 'Lưu hành nội bộ (Ngữ liệu thực hành)',
     publishYear: '2026',
     verificationStatus: 'Ngữ liệu tự biên soạn',
@@ -106,7 +132,7 @@ Một nhịp cầu thương nhớ của quê nhà.`,
   {
     id: 'passage-practice-10-story',
     title: 'Người thắp đèn ở ga xép',
-    author: '',
+    author: 'Ngữ liệu thực hành tự biên soạn (Ngữ Văn Thông Minh)',
     genre: 'Truyện',
     grade: '10',
     textbookSeries: 'Chân trời sáng tạo',
@@ -120,7 +146,7 @@ Một nhịp cầu thương nhớ của quê nhà.`,
 Khi chuyến tàu chậm rãi lăn bánh an toàn qua ga xép, ánh đèn từ toa lái quét ngang khuôn mặt sạm gió của ông. Trên chuyến tàu ấy không ai biết tên người gác ghi già, chỉ thấy một vệt sáng vàng ấm áp vẫn đứng yên bên đường ray cho tới khi toa cuối cùng khuất sau màn mưa.`,
     formatStyle: 'prose',
     origin: 'Ngữ liệu thực hành tự biên soạn phục vụ luyện đọc hiểu truyện ngắn lớp 10',
-    citationSource: 'Tư liệu tự biên soạn trong hệ thống Văn Học Thông Minh (2026)',
+    citationSource: 'Tư liệu tự biên soạn trong hệ thống Ngữ Văn Thông Minh (2026)',
     publisher: 'Lưu hành nội bộ (Ngữ liệu thực hành)',
     publishYear: '2026',
     verificationStatus: 'Ngữ liệu tự biên soạn',
@@ -139,7 +165,7 @@ Khi chuyến tàu chậm rãi lăn bánh an toàn qua ga xép, ánh đèn từ t
   {
     id: 'passage-practice-11-argument',
     title: 'Đọc chậm giữa thời đại tốc độ',
-    author: '',
+    author: 'Ngữ liệu thực hành tự biên soạn (Ngữ Văn Thông Minh)',
     genre: 'Văn bản nghị luận',
     grade: '11',
     textbookSeries: 'Cánh Diều',
@@ -153,7 +179,7 @@ Khi chuyến tàu chậm rãi lăn bánh an toàn qua ga xép, ánh đèn từ t
 Giữ nhịp đọc chậm cũng là cách rèn luyện sự kiên nhẫn cho tư duy. Khi biết dừng lại trước một khái niệm chưa rõ hay một câu văn giàu sức gợi, người đọc không chỉ thu nhận thông tin mà còn hình thành bản lĩnh tự chủ trước dòng chảy ồn ào của mạng xã hội.`,
     formatStyle: 'prose',
     origin: 'Ngữ liệu thực hành tự biên soạn phục vụ luyện đọc hiểu văn bản nghị luận lớp 11',
-    citationSource: 'Tư liệu tự biên soạn trong hệ thống Văn Học Thông Minh (2026)',
+    citationSource: 'Tư liệu tự biên soạn trong hệ thống Ngữ Văn Thông Minh (2026)',
     publisher: 'Lưu hành nội bộ (Ngữ liệu thực hành)',
     publishYear: '2026',
     verificationStatus: 'Ngữ liệu tự biên soạn',
@@ -466,19 +492,8 @@ let seedPromise: Promise<void> | null = null;
 export async function ensureDatabaseSeeded(): Promise<void> {
   if (seedPromise) return seedPromise;
   seedPromise = (async () => {
-    // Migrate only the old placeholder name; preserve real school names.
-    const isOldSchool = (name: string) => /^(TRƯỜNG THPT THỰC HÀNH SMART LITERATURE|TRƯỜNG THPT MẪU GDPT 2018)$/i.test(name.trim());
-    await db.exams.toCollection().modify(e => { if (isOldSchool(e.adminInfo.schoolName)) e.adminInfo.schoolName = 'TRƯỜNG THPT'; });
-    await db.settings.toCollection().modify(e => { if (!e.defaultSchoolName.trim() || isOldSchool(e.defaultSchoolName)) e.defaultSchoolName = 'TRƯỜNG THPT'; });
-    await db.users.toCollection().modify(e => { if (e.schoolName && isOldSchool(e.schoolName)) e.schoolName = 'TRƯỜNG THPT'; });
-    // Correct only the known erroneous built-in attribution, including saved copies.
-    const clearFalseAuthor = (p: ReadingPassage) => {
-      if (p && p.id === 'passage-practice-12-poem' && p.author === 'Hồ Nguyễn Đa Thiện (Ngữ liệu thực hành tự biên soạn)') p.author = '';
-    };
-    await db.passages.toCollection().modify(clearFalseAuthor);
-    await db.exams.toCollection().modify(e => { if (e.passage) clearFalseAuthor(e.passage); });
-    const settingsCount = await db.settings.count();
-    if (settingsCount === 0) {
+    const existingSettings = await db.settings.get('default');
+    if (!existingSettings) {
       await db.settings.put({
         id: 'default',
         defaultSchoolName: 'TRƯỜNG THPT',
@@ -489,6 +504,10 @@ export async function ensureDatabaseSeeded(): Promise<void> {
         wordLineSpacing: 1.35,
         wordMarginsMm: { top: 20, bottom: 20, left: 25, right: 15 },
       });
+    } else if (
+      /SMART LITERATURE|MẪU GDPT 2018/i.test(existingSettings.defaultSchoolName || '')
+    ) {
+      await db.settings.update('default', { defaultSchoolName: 'TRƯỜNG THPT' });
     }
 
     const usersCount = await db.users.count();

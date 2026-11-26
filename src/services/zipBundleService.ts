@@ -247,7 +247,7 @@ export async function buildBackupPayload(): Promise<FullBackupPayload> {
   return {
     schemaVersion: 1,
     exportedAt: new Date().toISOString(),
-    app: 'VĂN HỌC THÔNG MINH – SMART LITERATURE',
+    app: 'NGỮ VĂN THÔNG MINH – SMART LITERATURE',
     data: {
       passages,
       questions,
@@ -281,7 +281,7 @@ function buildOfflineCatalogHtml(payload: FullBackupPayload): string {
 <html lang="vi">
 <head>
 <meta charset="UTF-8" />
-<title>Mục lục kho đề – Văn Học Thông Minh</title>
+<title>Mục lục kho đề – Ngữ Văn Thông Minh</title>
 <style>
   body { font-family: system-ui, -apple-system, sans-serif; max-width: 1080px; margin: 32px auto; padding: 0 20px; color: #102438; background: #FAF8F5; }
   h1, h2 { color: #0F2942; }
@@ -291,7 +291,7 @@ function buildOfflineCatalogHtml(payload: FullBackupPayload): string {
 </style>
 </head>
 <body>
-  <h1>MỤC LỤC KHO ĐỀ & NGỮ LIỆU – VĂN HỌC THÔNG MINH</h1>
+  <h1>MỤC LỤC KHO ĐỀ & NGỮ LIỆU – NGỮ VĂN THÔNG MINH</h1>
   <p>Ngày xuất sao lưu: ${formatDateVN(payload.exportedAt)} | Phiên bản dữ liệu: ${payload.schemaVersion}</p>
   <h2>1. Danh mục Đề kiểm tra (${payload.data.exams.length})</h2>
   <table>

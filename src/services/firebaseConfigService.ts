@@ -28,7 +28,7 @@ export async function getActiveUser(): Promise<UserProfile> {
     email: 'dathien2412@gmail.com',
     roles: ['admin', 'teacher'],
     activeRole: 'teacher',
-    schoolName: 'Trường THPT Thực hành Smart Literature',
+    schoolName: 'TRƯỜNG THPT',
     department: 'Tổ Ngữ văn',
     gradeFocus: '12',
     status: 'active',

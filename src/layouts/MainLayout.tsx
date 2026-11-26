@@ -5,6 +5,7 @@ import {
   Award,
   BarChart3,
   BookOpen,
+  Box,
   CheckSquare,
   ChevronDown,
   ChevronRight,
@@ -18,6 +19,7 @@ import {
   Gamepad2,
   GitBranch,
   GraduationCap,
+  HelpCircle,
   Home,
   LayoutDashboard,
   Library,
@@ -53,7 +55,8 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: '/', label: 'Trang chủ', icon: Home },
       { path: '/tong-quan', label: 'Tổng quan', icon: LayoutDashboard },
-      { path: '/huong-dan-su-dung', label: 'Hướng dẫn sử dụng', icon: BookOpen },
+      { path: '/kham-pha-2d-3d', label: 'Khám phá Ngữ văn 2D/3D', icon: Box },
+      { path: '/huong-dan-su-dung', label: 'Hướng dẫn sử dụng', icon: HelpCircle },
     ],
   },
   {
@@ -71,6 +74,7 @@ const NAV_GROUPS: NavGroup[] = [
     id: 'materials',
     label: 'Học liệu và bài giảng',
     items: [
+      { path: '/kham-pha-2d-3d', label: 'Khám phá Ngữ văn 2D/3D', icon: Box },
       { path: '/ngan-hang-ngu-lieu', label: 'Ngân hàng ngữ liệu', icon: Library },
       { path: '/ke-hoach-bai-day', label: 'Kế hoạch bài dạy', icon: BookOpen },
       { path: '/bai-giang', label: 'Bài giảng và trình chiếu', icon: Presentation },
@@ -80,9 +84,8 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     id: 'labs',
-    label: 'Phòng thực hành',
+    label: 'Thực hành & Luyện tập',
     items: [
-      { path: '/kham-pha-ngu-van', label: 'Khám phá Ngữ văn 2D/3D', icon: Sparkles },
       { path: '/kham-pha-tho', label: 'Khám phá thơ ca', icon: Sparkles },
       { path: '/kham-pha-truyen', label: 'Khám phá truyện', icon: BookOpen },
       { path: '/luyen-viet', label: 'Phòng luyện viết', icon: PenTool },
@@ -104,6 +107,7 @@ const NAV_GROUPS: NavGroup[] = [
     id: 'system',
     label: 'Hệ thống',
     items: [
+      { path: '/huong-dan-su-dung', label: 'Hướng dẫn sử dụng', icon: HelpCircle },
       { path: '/tro-ly-ai', label: 'Trợ lý AI', icon: Sparkles },
       { path: '/sao-luu', label: 'Sao lưu và phục hồi', icon: Archive },
       { path: '/tai-khoan', label: 'Tài khoản', icon: UserCircle2 },
@@ -130,7 +134,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showIOSGuide, setShowIOSGuide] = useState(false);
-  const [topMenuOpen, setTopMenuOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     overview: true,
     assessment: true,
@@ -154,9 +157,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF8F5] text-[#102438]">
-      {/* Clean Top Bar (3-zone contract) */}
-      <header className="app-topbar no-print sticky top-0 z-40 min-h-14 bg-white/95 backdrop-blur border-b border-[#E5E0D8] px-2 sm:px-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 min-w-0 py-1">
-        <div className="flex items-center gap-1 min-w-0">
+      {/* Clean Top Bar (Balanced, non-overflowing across desktop & mobile) */}
+      <header className="app-topbar no-print sticky top-0 z-40 h-14 bg-white/95 backdrop-blur border-b border-[#E5E0D8] px-3 lg:px-5 flex items-center justify-between gap-2 overflow-x-clip">
+        <div className="flex items-center gap-2 shrink-0">
           {!isLanding && (
             <button
               type="button"
@@ -175,18 +178,29 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
           )}
           <Link
             to="/"
-            className="text-sm sm:text-base font-bold tracking-tight text-[#0F2942] truncate min-w-0" title="Ngữ Văn Thông Minh"
+            className="font-serif text-[17px] font-bold tracking-tight text-[#0F2942] whitespace-nowrap shrink-0"
           >
             Ngữ Văn Thông Minh
           </Link>
         </div>
 
-        {/* Center concise links */}
-        <nav className="hidden min-[1280px]:flex items-center gap-3 text-[13px] font-medium text-slate-600">
+        {/* Center concise links — never overflows or hides Hướng dẫn sử dụng */}
+        <nav className="hidden lg:flex items-center gap-3.5 xl:gap-5 text-[13px] font-semibold text-slate-600 min-w-0">
+          <Link
+            to="/kham-pha-2d-3d"
+            className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 transition-colors whitespace-nowrap shrink-0 ${
+              location.pathname.startsWith('/kham-pha-2d-3d')
+                ? 'bg-[#1D63ED] text-white'
+                : 'bg-blue-50 text-[#1D63ED] hover:bg-blue-100'
+            }`}
+          >
+            <Box className="w-3.5 h-3.5" />
+            <span>Khám phá 2D/3D</span>
+          </Link>
           <Link
             to="/soan-de"
             className={`hover:text-[#0F2942] transition-colors whitespace-nowrap shrink-0 ${
-              location.pathname === '/soan-de' ? 'text-[#0F2942] font-semibold' : ''
+              location.pathname === '/soan-de' ? 'text-[#0F2942] font-bold' : ''
             }`}
           >
             Soạn đề
@@ -194,15 +208,15 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
           <Link
             to="/ma-tran-dac-ta"
             className={`hover:text-[#0F2942] transition-colors whitespace-nowrap shrink-0 ${
-              location.pathname === '/ma-tran-dac-ta' ? 'text-[#0F2942] font-semibold' : ''
+              location.pathname === '/ma-tran-dac-ta' ? 'text-[#0F2942] font-bold' : ''
             }`}
           >
-            Ma trận & Đặc tả
+            Ma trận
           </Link>
           <Link
             to="/ngan-hang-ngu-lieu"
             className={`hover:text-[#0F2942] transition-colors whitespace-nowrap shrink-0 ${
-              location.pathname === '/ngan-hang-ngu-lieu' ? 'text-[#0F2942] font-semibold' : ''
+              location.pathname === '/ngan-hang-ngu-lieu' ? 'text-[#0F2942] font-bold' : ''
             }`}
           >
             Ngữ liệu
@@ -210,59 +224,81 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
           <Link
             to="/bai-giang"
             className={`hover:text-[#0F2942] transition-colors whitespace-nowrap shrink-0 ${
-              location.pathname === '/bai-giang' ? 'text-[#0F2942] font-semibold' : ''
+              location.pathname === '/bai-giang' ? 'text-[#0F2942] font-bold' : ''
             }`}
           >
             Bài giảng
           </Link>
           <Link
             to="/luyen-thi-thpt"
-            className={`hover:text-[#0F2942] transition-colors whitespace-nowrap shrink-0 ${
-              location.pathname === '/luyen-thi-thpt' ? 'text-[#0F2942] font-semibold' : ''
+            className={`hidden xl:inline hover:text-[#0F2942] transition-colors whitespace-nowrap shrink-0 ${
+              location.pathname === '/luyen-thi-thpt' ? 'text-[#0F2942] font-bold' : ''
             }`}
           >
             Luyện thi THPT
           </Link>
+          <Link
+            to="/huong-dan-su-dung"
+            className={`inline-flex items-center gap-1 hover:text-[#0F2942] transition-colors whitespace-nowrap shrink-0 ${
+              location.pathname === '/huong-dan-su-dung' ? 'text-[#1D63ED] font-bold' : ''
+            }`}
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span>Hướng dẫn sử dụng</span>
+          </Link>
         </nav>
 
-        {/* Right Primary Action / Workspace Role Switcher */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <Link to="/huong-dan-su-dung" aria-label="Hướng dẫn sử dụng" title="Hướng dẫn sử dụng" className="inline-flex items-center gap-1 rounded-lg border border-teal-700/30 px-2 py-2 text-teal-800 hover:bg-teal-50"><BookOpen className="w-4 h-4"/><span className="text-sm font-semibold whitespace-nowrap"><span className="hidden sm:inline">Hướng dẫn sử dụng</span><span className="sm:hidden">Hướng dẫn</span></span></Link>
+        {/* Right Primary Actions */}
+        <div className="flex items-center gap-2 shrink-0">
           {!isOnline && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md whitespace-nowrap">
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md whitespace-nowrap">
               <WifiOff className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Ngoại tuyến</span>
             </span>
           )}
 
-          {!isInstalled && isInstallable && (
+          {/* Mobile quick links for Khám phá 2D/3D and Hướng dẫn sử dụng */}
+          <Link
+            to="/kham-pha-2d-3d"
+            className="lg:hidden inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1D63ED] text-white text-xs font-bold whitespace-nowrap"
+          >
+            <Box className="w-3.5 h-3.5" />
+            <span>2D/3D</span>
+          </Link>
+          <Link
+            to="/huong-dan-su-dung"
+            className="lg:hidden inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-[#0F2942] text-xs font-semibold whitespace-nowrap"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span>Hướng dẫn</span>
+          </Link>
+
+          {!isInstalled && (
             <button
               type="button"
-              onClick={install}
-              className="hidden min-[1700px]:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#0D7A6F]/30 text-[#0D7A6F] text-xs font-medium hover:bg-[#0D7A6F]/5 transition-colors whitespace-nowrap shrink-0"
+              onClick={() => {
+                if (isInstallable) {
+                  install();
+                } else {
+                  setShowIOSGuide(true);
+                }
+              }}
+              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#0D7A6F]/35 text-[#0D7A6F] text-xs font-semibold hover:bg-[#0D7A6F]/5 transition-colors whitespace-nowrap shrink-0"
+              title="Cài ứng dụng Ngữ Văn Thông Minh dùng offline trên máy tính hoặc điện thoại"
             >
               <Download className="w-3.5 h-3.5" />
-              Cài đặt ứng dụng
-            </button>
-          )}
-          {!isInstalled && !isInstallable && isIOS && (
-            <button
-              type="button"
-              onClick={() => setShowIOSGuide(true)}
-              className="hidden min-[1700px]:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-xs font-medium hover:bg-slate-50 whitespace-nowrap shrink-0"
-            >
-              Cài trên iOS
+              <span>Cài ứng dụng dùng offline</span>
             </button>
           )}
 
           {activeUser.roles.length > 1 && (
-            <div className="hidden min-[1700px]:flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+            <div className="hidden xl:flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
               {activeUser.roles.map((r) => (
                 <button
                   key={r}
                   type="button"
                   onClick={() => onSwitchRole(r)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                  className={`px-2 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
                     activeUser.activeRole === r
                       ? 'bg-[#0F2942] text-white'
                       : 'text-slate-600 hover:text-[#0F2942]'
@@ -283,21 +319,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
           <button
             type="button"
             onClick={() => navigate('/soan-de')}
-            className="hidden md:inline-flex px-2.5 py-1.5 rounded-lg bg-[#0F2942] text-white text-xs font-semibold hover:bg-[#173B5E] transition-colors whitespace-nowrap shrink-0"
+            className="hidden md:inline-flex px-3 py-1.5 rounded-lg bg-[#0F2942] text-white text-xs font-semibold hover:bg-[#173B5E] transition-colors whitespace-nowrap shrink-0"
           >
             Soạn đề mới
           </button>
-          <button type="button" aria-expanded={topMenuOpen} aria-controls="compact-top-menu" onClick={() => setTopMenuOpen(v => !v)} className="min-[1700px]:hidden inline-flex items-center gap-1 p-2 rounded-lg border border-slate-200 text-sm whitespace-nowrap" title="Menu chức năng"><Menu className="w-4 h-4"/><span className="hidden sm:inline">Menu</span></button>
         </div>
-        {topMenuOpen && (
-          <div id="compact-top-menu" className="min-[1700px]:hidden absolute top-full right-2 left-2 sm:left-auto sm:w-72 max-h-[75vh] overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg p-2 z-50">
-            {[{path:'/soan-de',label:'Soạn đề thông minh'},{path:'/ma-tran-dac-ta',label:'Ma trận & Đặc tả'},{path:'/ngan-hang-ngu-lieu',label:'Ngữ liệu'},{path:'/bai-giang',label:'Bài giảng'},{path:'/luyen-thi-thpt',label:'Luyện thi THPT'},{path:'/huong-dan-su-dung',label:'Hướng dẫn sử dụng'}].map(item => <Link key={item.path} to={item.path} onClick={() => setTopMenuOpen(false)} className="min-[1280px]:hidden block px-3 py-2 rounded hover:bg-slate-100 text-sm">{item.label}</Link>)}
-            {!isInstalled && isInstallable && <button type="button" onClick={() => { setTopMenuOpen(false); install(); }} className="block w-full text-left px-3 py-2 text-sm">Cài đặt ứng dụng</button>}
-            {!isInstalled && !isInstallable && isIOS && <button type="button" onClick={() => { setTopMenuOpen(false); setShowIOSGuide(true); }} className="block w-full text-left px-3 py-2 text-sm">Cài trên iOS</button>}
-            {activeUser.roles.length > 1 && activeUser.roles.map(r => <button key={r} type="button" onClick={() => { onSwitchRole(r); setTopMenuOpen(false); }} className={`block w-full text-left px-3 py-2 rounded text-sm ${activeUser.activeRole === r ? 'bg-slate-100 font-semibold' : ''}`}>{roleLabels[r]}</button>)}
-            <button type="button" onClick={() => { navigate('/soan-de'); setTopMenuOpen(false); }} className="block w-full text-left px-3 py-2 rounded bg-[#0F2942] text-white text-sm">Soạn đề mới</button>
-          </div>
-        )}
       </header>
 
       <div className="flex-1 flex min-h-0 relative">
@@ -418,25 +444,65 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         </main>
       </div>
 
-      {/* iOS Install instruction sheet */}
+      {/* Multi-OS Offline PWA Install Instruction Modal (Windows, macOS, Android, iOS) */}
       {showIOSGuide && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 no-print">
-          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl border border-slate-200">
-            <h3 className="text-base font-bold text-[#0F2942]">
-              Cài đặt trên iPhone / iPad
-            </h3>
-            <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-              1. Nhấn nút <strong>Chia sẻ (Share)</strong> trên thanh công cụ Safari.
-              <br />
-              2. Cuộn xuống và chọn <strong>Thêm vào Màn hình chính</strong>.
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowIOSGuide(false)}
-              className="mt-4 w-full rounded-lg bg-[#0F2942] py-2 text-sm font-medium text-white hover:bg-[#173B5E]"
-            >
-              Đã hiểu
-            </button>
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="text-lg font-bold text-[#0F2942]">
+                  Cài đặt Ngữ Văn Thông Minh dùng Offline (PWA)
+                </h3>
+                <p className="text-sm text-slate-600 mt-0.5">
+                  Cài trực tiếp thành ứng dụng độc lập trên thiết bị, không cần tải tệp cài đặt rời.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowIOSGuide(false)}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-[14px] text-slate-700 leading-relaxed">
+              <div className="rounded-xl bg-slate-50 p-3 border border-slate-200">
+                <p className="font-bold text-[#0F2942]">1. Máy tính Windows / macOS (Chrome, Edge)</p>
+                <p className="mt-1">
+                  Nhấn biểu tượng <strong>Cài đặt ứng dụng (hình màn hình có mũi tên)</strong> ở góc phải thanh địa chỉ trình duyệt → chọn <strong>Cài đặt (Install)</strong>.
+                </p>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3 border border-slate-200">
+                <p className="font-bold text-[#0F2942]">2. Điện thoại / Máy tính bảng Android (Chrome)</p>
+                <p className="mt-1">
+                  Nhấn nút menu <strong>⋮</strong> ở góc phải trên → chọn <strong>Cài đặt ứng dụng</strong> hoặc <strong>Thêm vào Màn hình chính</strong>.
+                </p>
+              </div>
+              <div className={`rounded-xl p-3 border ${isIOS ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'}`}>
+                <p className="font-bold text-[#0F2942]">3. iPhone / iPad (Safari)</p>
+                <p className="mt-1">
+                  Nhấn biểu tượng <strong>Chia sẻ (Share)</strong> ở thanh dưới → cuộn xuống chọn <strong>Thêm vào Màn hình chính (Add to Home Screen)</strong> → nhấn <strong>Thêm</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Link
+                to="/kham-pha-2d-3d"
+                onClick={() => setShowIOSGuide(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-[#0F2942] hover:bg-slate-50"
+              >
+                Tải gói bài 2D/3D offline
+              </Link>
+              <button
+                type="button"
+                onClick={() => setShowIOSGuide(false)}
+                className="rounded-xl bg-[#0F2942] px-5 py-2 text-sm font-semibold text-white hover:bg-[#173B5E]"
+              >
+                Đã hiểu
+              </button>
+            </div>
           </div>
         </div>
       )}

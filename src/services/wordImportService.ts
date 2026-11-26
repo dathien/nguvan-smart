@@ -73,7 +73,7 @@ export function parseImportedExamText(rawText: string): SmartImportResult {
         segments.push({
           id: generateId('seg'),
           kind: 'header',
-          rawText: 'Nhận diện cấu trúc JSON hợp lệ của Văn Học Thông Minh.',
+          rawText: 'Nhận diện cấu trúc JSON hợp lệ của Ngữ Văn Thông Minh.',
           recognized: true,
         });
         return { rawText: text, examDraft, segments, warnings };

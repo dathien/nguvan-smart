@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
   BookOpen,
+  Box,
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
   FileText,
   Gamepad2,
   GraduationCap,
+  HelpCircle,
   Layers,
   Pause,
   Play,
@@ -50,12 +52,12 @@ const HERO_SLIDES: HeroSlide[] = [
   },
   {
     id: 'slide-3',
-    kicker: 'Phân hệ 03 · Ngữ liệu & Tương tác',
-    title: 'Khám phá thế giới văn học',
+    kicker: 'Phân hệ 03 · Trải nghiệm tác phẩm trực quan',
+    title: 'Khám phá Ngữ văn 2D/3D THPT 10–11–12',
     description:
-      'Không gian thực hành phân tích thơ ca, cốt truyện, văn bản nghị luận và thông tin với sơ đồ tư duy tương tác trực quan.',
-    ctaLabel: 'Vào phòng thực hành',
-    targetPath: '/kham-pha-tho',
+      'Trải nghiệm 40 mô phỏng 3D sa bàn isometric và sơ đồ 2D tương tác giúp thấu hiểu không gian nghệ thuật, nhân vật và phát triển năng lực đọc hiểu.',
+    ctaLabel: 'Mở Khám phá Ngữ văn 2D/3D',
+    targetPath: '/kham-pha-2d-3d',
     imageUrl: '/src/assets/images/slide_literature_world_1794726655728.jpg',
   },
   {
@@ -172,10 +174,10 @@ export const HomePage: React.FC<HomePageProps> = ({
               Smart Literature · GDPT 2018 · Lớp 10 – 11 – 12 & GDTX
             </p>
             <h1 className="font-serif text-3xl sm:text-4xl lg:text-[42px] font-bold text-[#0F2942] leading-tight mt-1">
-              Văn Học Thông Minh
+              Ngữ Văn Thông Minh
             </h1>
             <p className="text-slate-600 text-base mt-1.5 max-w-2xl">
-              Khơi nguồn cảm hứng – Phát triển năng lực ngôn ngữ. Hệ thống soạn giảng, kiểm tra, đánh giá và phát triển năng lực Ngữ văn THPT.
+              Khơi nguồn cảm hứng – Phát triển năng lực ngôn ngữ. Hệ thống soạn giảng, kiểm tra, đánh giá và Khám phá Ngữ văn 2D/3D THPT.
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-600">
@@ -290,6 +292,43 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Featured Banner: Khám phá Ngữ văn 2D/3D (40 Interactive Lessons) */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-4">
+        <div className="rounded-2xl bg-gradient-to-r from-[#0F2942] via-[#153C63] to-[#1D63ED] p-6 sm:p-7 text-white shadow-md flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+          <div className="space-y-2 max-w-2xl">
+            <div className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1 text-xs font-bold tracking-wide text-blue-100">
+              <Box className="w-4 h-4" />
+              <span>PHÂN HỆ MỚI · 40 BÀI MÔ PHỎNG 2D/3D MIỄN PHÍ &amp; OFFLINE</span>
+            </div>
+            <h2 className="font-serif text-2xl sm:text-3xl font-bold text-white">
+              Khám phá Ngữ văn 2D/3D THPT 10–11–12
+            </h2>
+            <p className="text-[15px] text-blue-100 leading-relaxed">
+              “Trải nghiệm tác phẩm – Thấu hiểu nhân vật – Phát triển năng lực đọc hiểu”. Đủ 40 tác phẩm và chuyên đề kĩ năng kèm chế độ trình chiếu lớp học, bảng vẽ ghi chú và xuất Word/PNG/SVG.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => navigate('/kham-pha-2d-3d')}
+              className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-[15px] font-bold text-[#0F2942] shadow-sm hover:bg-blue-50 transition"
+            >
+              <Box className="w-4 h-4 text-[#1D63ED]" />
+              <span>Mở 40 mô phỏng 2D/3D</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/huong-dan-su-dung')}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-[14px] font-bold text-white hover:bg-white/20 transition"
+            >
+              <HelpCircle className="w-4 h-4" />
+              <span>Hướng dẫn sử dụng</span>
+            </button>
           </div>
         </div>
       </section>

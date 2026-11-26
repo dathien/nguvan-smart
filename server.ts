@@ -120,9 +120,59 @@ NGUYÊN TẮC BẮT BUỘC:
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        ws: false,
+        hmr: false,
+      },
       appType: 'spa',
     });
+
+    // Serve a clean WebSocket-free @vite/client shim in middlewareMode
+    // so CSS injection works normally without failing HMR WebSocket connections behind HTTPS proxies.
+    app.get('/@vite/client', (_req, res) => {
+      res.type('application/javascript').send(`
+const sheetsMap = new Map();
+export function updateStyle(id, content) {
+  let style = sheetsMap.get(id);
+  if (!style) {
+    style = document.createElement('style');
+    style.setAttribute('type', 'text/css');
+    style.setAttribute('data-vite-dev-id', id);
+    style.textContent = content;
+    document.head.appendChild(style);
+    sheetsMap.set(id, style);
+  } else {
+    style.textContent = content;
+  }
+}
+export function removeStyle(id) {
+  const style = sheetsMap.get(id);
+  if (style) {
+    document.head.removeChild(style);
+    sheetsMap.delete(id);
+  }
+}
+export function createHotContext() {
+  return {
+    data: {},
+    accept() {},
+    acceptExports() {},
+    dispose() {},
+    prune() {},
+    invalidate() {},
+    on() {},
+    off() {},
+    send() {},
+  };
+}
+export function injectQuery(url) {
+  return url;
+}
+export class ErrorOverlay extends HTMLElement {}
+`);
+    });
+
     app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(__dirname, 'dist');
@@ -133,7 +183,7 @@ NGUYÊN TẮC BẮT BUỘC:
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Văn Học Thông Minh server running on http://0.0.0.0:${PORT}`);
+    console.log(`Ngữ Văn Thông Minh server running on http://0.0.0.0:${PORT}`);
   });
 }
 
