@@ -82,6 +82,7 @@ const NAV_GROUPS: NavGroup[] = [
     id: 'labs',
     label: 'Phòng thực hành',
     items: [
+      { path: '/kham-pha-ngu-van', label: 'Khám phá Ngữ văn 2D/3D', icon: Sparkles },
       { path: '/kham-pha-tho', label: 'Khám phá thơ ca', icon: Sparkles },
       { path: '/kham-pha-truyen', label: 'Khám phá truyện', icon: BookOpen },
       { path: '/luyen-viet', label: 'Phòng luyện viết', icon: PenTool },
