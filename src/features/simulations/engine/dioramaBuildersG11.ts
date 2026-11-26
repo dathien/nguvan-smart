@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { Scene3DPreset } from '../types';
 import { BuiltDioramaScene } from './dioramaBuildersG10';
+import { createBuildingFire, createHandheldFire } from '../effects/RealisticFire';
+import { EnvironmentalEffectsManager } from '../effects/EnvironmentalEffects';
 import {
+  attachLabelAnchor,
   createAnimatedOceanSurface,
   createArticulatedFigure,
   createBambooCluster,
@@ -20,6 +23,7 @@ import {
 
 export function buildGrade11Diorama(preset: Scene3DPreset): BuiltDioramaScene | null {
   const root = new THREE.Group();
+  const effects = new EnvironmentalEffectsManager();
 
   // 11. Vợ nhặt — Famine village lane, wooden cart with spoked wheels, thatched cottage with warm oil lamp, meal mat & red flag of hope
   if (preset === 'famine-village') {
@@ -134,17 +138,21 @@ export function buildGrade11Diorama(preset: Scene3DPreset): BuiltDioramaScene | 
     const bamboo = createBambooCluster(1.1);
     bamboo.position.set(-4.3, 0, -2.8);
     root.add(bamboo);
+    effects.collectWindCanopiesFromRoot(root);
 
     return {
       root,
       backdropColor: 0xece9e4,
+      effects,
       update: (t, stageIndex, params) => {
         const hope = (params.hopeLight ?? 65) / 100;
         lampLight.intensity = (stageIndex === 1 ? 13 : 6.5) * hope;
         const targetFlagScale = stageIndex === 2 ? 1.08 : 0.45;
         flagGroup.scale.setScalar(flagGroup.scale.x + (targetFlagScale - flagGroup.scale.x) * 0.08);
         flag.rotation.y = Math.sin(t * 3.2) * 0.16;
+        effects.updateAmbient(t, 0.8);
       },
+      dispose: () => effects.dispose(),
     };
   }
 
@@ -230,8 +238,8 @@ export function buildGrade11Diorama(preset: Scene3DPreset): BuiltDioramaScene | 
     tagHotspotGroup(baKienHouse, 'hs-12-4');
     root.add(baKienHouse);
 
-    // Winding village river along the front bank
-    const { group: river, waterTexture } = createWindingRiver({
+    // Winding village river along the front bank (GLSL RealisticWater)
+    const { group: river, waterMaterial } = createWindingRiver({
       points: [
         [-5.8, 4.3],
         [-1.8, 3.8],
@@ -242,15 +250,21 @@ export function buildGrade11Diorama(preset: Scene3DPreset): BuiltDioramaScene | 
       waterColor: 0x2a88ad,
       bankColor: 0x7c9c66,
     });
+    if (waterMaterial instanceof THREE.ShaderMaterial) {
+      effects.registerWater(waterMaterial);
+    }
     root.add(river);
+    effects.collectWindCanopiesFromRoot(root);
 
     return {
       root,
       backdropColor: 0xe6edf4,
+      effects,
       update: (t) => {
-        waterTexture.offset.y = -(t * 0.2) % 1;
         bowl.position.y = 0.14 + Math.sin(t * 2.5) * 0.025;
+        effects.updateAmbient(t, 0.85);
       },
+      dispose: () => effects.dispose(),
     };
   }
 
@@ -331,10 +345,17 @@ export function buildGrade11Diorama(preset: Scene3DPreset): BuiltDioramaScene | 
     tagHotspotGroup(skyGroup, 'hs-13-4');
     root.add(skyGroup);
 
+    effects.registerCloud(c1, 0.22, 0.45, 0);
+    effects.registerCloud(c2, 0.18, 0.5, 1.4);
+    effects.registerCloud(c3, 0.25, 0.42, 2.8);
+    effects.registerWater(riverSurface.waterMaterial);
+    effects.collectWindCanopiesFromRoot(root);
+
     return {
       root,
       backdropColor: 0xe4ecf5,
       fogDensity: 0.011,
+      effects,
       update: (t) => {
         riverSurface.updateWaves(t, 0.055);
         boat.position.y = 0.09 + Math.sin(t * 1.6) * 0.045;
@@ -344,7 +365,9 @@ export function buildGrade11Diorama(preset: Scene3DPreset): BuiltDioramaScene | 
         birdGroup.position.x = Math.sin(t * 0.85) * 1.5;
         wingL.rotation.z = 0.25 + Math.sin(t * 5) * 0.22;
         wingR.rotation.z = -0.25 - Math.sin(t * 5) * 0.22;
+        effects.updateAmbient(t, 0.85);
       },
+      dispose: () => effects.dispose(),
     };
   }
 
@@ -361,8 +384,8 @@ export function buildGrade11Diorama(preset: Scene3DPreset): BuiltDioramaScene | 
       })
     );
 
-    // Graceful S-curved Perfume River ribbon across the entire diorama
-    const { group: riverGroup, waterTexture } = createWindingRiver({
+    // Graceful S-curved Perfume River ribbon across the entire diorama (GLSL RealisticWater)
+    const { group: riverGroup, waterMaterial } = createWindingRiver({
       points: [
         [-4.9, -2.6],
         [-2.2, -0.6],
@@ -374,8 +397,10 @@ export function buildGrade11Diorama(preset: Scene3DPreset): BuiltDioramaScene | 
       waterColor: 0x0ea5e9,
       bankColor: 0x6ea05b,
     });
+    if (waterMaterial instanceof THREE.ShaderMaterial) {
+      effects.registerWater(waterMaterial);
+    }
     root.add(riverGroup);
-    const riverWaterMesh = riverGroup.children[1] as THREE.Mesh;
 
     // Trường Sơn karst mountain range + red đỗ quyên forest blossoms
     const upperGroup = new THREE.Group();
@@ -418,24 +443,31 @@ export function buildGrade11Diorama(preset: Scene3DPreset): BuiltDioramaScene | 
     hueHouse.rotation.y = -0.45;
     tagHotspotGroup(hueHouse, 'hs-14-4');
     root.add(hueHouse);
+    effects.collectWindCanopiesFromRoot(root);
 
     const morningCol = new THREE.Color(0x0ea5e9);
     const noonCol = new THREE.Color(0xd97706);
     const duskCol = new THREE.Color(0x7c3aed);
+    const blendCol = new THREE.Color();
 
     return {
       root,
       backdropColor: 0xe7f3fb,
+      effects,
       update: (t, _stage, params) => {
-        waterTexture.offset.y = -(t * 0.22) % 1;
         const ratio = (params.timeOfDayHue ?? 50) / 100;
-        const mat = riverWaterMesh.material as THREE.MeshStandardMaterial;
         if (ratio < 0.5) {
-          mat.color.copy(morningCol).lerp(noonCol, ratio * 2 * 0.48);
+          blendCol.copy(morningCol).lerp(noonCol, ratio * 2 * 0.48);
         } else {
-          mat.color.copy(morningCol).lerp(duskCol, (ratio - 0.5) * 2 * 0.68);
+          blendCol.copy(morningCol).lerp(duskCol, (ratio - 0.5) * 2 * 0.68);
         }
+        if (waterMaterial instanceof THREE.ShaderMaterial) {
+          waterMaterial.uniforms.uShallowColor.value.copy(blendCol);
+          waterMaterial.uniforms.uDeepColor.value.copy(blendCol).multiplyScalar(0.65);
+        }
+        effects.updateAmbient(t, 0.9);
       },
+      dispose: () => effects.dispose(),
     };
   }
 
@@ -470,21 +502,23 @@ export function buildGrade11Diorama(preset: Scene3DPreset): BuiltDioramaScene | 
     const roof2 = createCurvedVietnameseRoof({ width: 2.95, depth: 2.15, height: 0.68, roofColor: 0xd98a1e, ridgeColor: 0xfde047 });
     roof2.position.y = 3.08;
 
-    const blazeMat = new THREE.MeshStandardMaterial({
-      color: 0xff8c1a,
-      emissive: 0xff3b00,
-      emissiveIntensity: 2.0,
-    });
-    const blaze1 = new THREE.Mesh(new THREE.ConeGeometry(0.56, 1.35, 10), blazeMat);
-    blaze1.position.set(-1.0, 2.55, 0.68);
-    const blaze2 = new THREE.Mesh(new THREE.ConeGeometry(0.46, 1.2, 10), blazeMat);
-    blaze2.position.set(1.05, 2.8, 0.45);
-    const blazeLight = new THREE.PointLight(0xff6b1a, 12, 16);
-    blazeLight.position.set(0, 3.2, 1.0);
+    // Real GLSL BuildingFire blazing on Cửu Trùng Đài in climax stage (ZERO cone flames!)
+    const palaceFire = effects.registerFire(
+      createBuildingFire({
+        plumeOffsets: [
+          [-1.15, 1.9, 0.65],
+          [0.0, 2.35, 0.55],
+          [1.15, 2.0, 0.5],
+        ],
+        scale: 1.05,
+        lightIntensity: 20,
+      })
+    );
 
-    towerGroup.add(tier1, tier2, roof1, tier3, roof2, blaze1, blaze2, blazeLight);
+    towerGroup.add(tier1, tier2, roof1, tier3, roof2, palaceFire.group);
     towerGroup.position.set(0, 0, -1.7);
     tagHotspotGroup(towerGroup, 'hs-15-1');
+    attachLabelAnchor(towerGroup, 'hs-15-1', 0, 3.8, 0);
     root.add(towerGroup);
 
     const vuNhuTo = createArticulatedFigure({
@@ -498,6 +532,7 @@ export function buildGrade11Diorama(preset: Scene3DPreset): BuiltDioramaScene | 
     vuNhuTo.position.set(-1.6, 0, 1.5);
     vuNhuTo.rotation.y = 0.45;
     tagHotspotGroup(vuNhuTo, 'hs-15-2');
+    attachLabelAnchor(vuNhuTo, 'hs-15-2', 0, 2.1, 0);
     root.add(vuNhuTo);
 
     const danThiem = createArticulatedFigure({
@@ -510,10 +545,16 @@ export function buildGrade11Diorama(preset: Scene3DPreset): BuiltDioramaScene | 
     danThiem.position.set(1.4, 0, 1.6);
     danThiem.rotation.y = -0.6;
     tagHotspotGroup(danThiem, 'hs-15-3');
+    attachLabelAnchor(danThiem, 'hs-15-3', 0, 1.9, 0);
     root.add(danThiem);
 
     const crowdGroup = new THREE.Group();
     const r1 = createArticulatedFigure({ robeColor: 0x475569, accentColor: 0xb45309, prop: 'torch', scale: 0.94 });
+    const rebelTorchFire = effects.registerFire(
+      createHandheldFire({ width: 0.34, height: 0.55, lightIntensity: 9, emberCount: 10, smokeCount: 4 })
+    );
+    const rTip = r1.userData.torchTipAnchor as THREE.Object3D | undefined;
+    if (rTip) rTip.add(rebelTorchFire.group);
     r1.position.set(3.2, 0, 2.9);
     r1.rotation.y = -2.2;
     const r2 = createArticulatedFigure({ robeColor: 0x334155, accentColor: 0x991b1b, scale: 0.92 });
@@ -521,6 +562,7 @@ export function buildGrade11Diorama(preset: Scene3DPreset): BuiltDioramaScene | 
     r2.rotation.y = -2.4;
     crowdGroup.add(r1, r2);
     tagHotspotGroup(crowdGroup, 'hs-15-4');
+    attachLabelAnchor(crowdGroup, 'hs-15-4', 3.55, 2.0, 2.6);
     root.add(crowdGroup);
 
     return {
@@ -528,12 +570,15 @@ export function buildGrade11Diorama(preset: Scene3DPreset): BuiltDioramaScene | 
       backdropColor: 0x1a1727,
       ambientIntensity: 0.45,
       directionalIntensity: 0.68,
-      update: (t, stageIndex, params) => {
-        const power = ((params.dramaIntensity ?? 75) / 100) * (stageIndex === 2 ? 1.25 : stageIndex === 1 ? 0.6 : 0.2);
-        blaze1.scale.setScalar(Math.max(0.01, power * (0.9 + Math.sin(t * 10) * 0.15)));
-        blaze2.scale.setScalar(Math.max(0.01, power * (0.9 + Math.cos(t * 12) * 0.15)));
-        blazeLight.intensity = 15 * power;
+      effects,
+      setQuality: (tier) => effects.setQuality(tier),
+      update: (t, stageIndex, params, dt = 0.016) => {
+        const power = (params.dramaIntensity ?? 75) / 100;
+        const burning = stageIndex >= 2;
+        palaceFire.update(dt, t, burning, power * 1.2);
+        rebelTorchFire.update(dt, t, stageIndex >= 1, 0.95);
       },
+      dispose: () => effects.dispose(),
     };
   }
 

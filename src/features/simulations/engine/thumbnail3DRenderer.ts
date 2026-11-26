@@ -83,8 +83,18 @@ function renderPresetOnce(preset: Scene3DPreset): string | null {
   scene.add(rim);
 
   scene.add(built.root);
-  // Step once at t=1.2s, stage 1 so dynamic elements (river, flames, clouds, poses) look alive
-  built.update(1.2, 1, {});
+  // Step once at t=1.2s with dt=0.016 so GLSL water/fire/clouds/poses render cleanly
+  const previewStage = preset === 'temple-ghost' ? 0 : 1;
+  built.update(1.2, previewStage, {}, 0.016);
+  const mood = built.getStageMood?.(previewStage);
+  if (mood) {
+    scene.background = new THREE.Color(mood.background);
+    hemi.color.setHex(mood.hemiSky);
+    hemi.groundColor.setHex(mood.hemiGround);
+    hemi.intensity = mood.hemiIntensity;
+    dir.color.setHex(mood.dirColor);
+    dir.intensity = mood.dirIntensity;
+  }
 
   // Exact 16:9 isometric OrthographicCamera framing the full diorama cleanly
   const aspect = 640 / 360;
@@ -110,9 +120,10 @@ function renderPresetOnce(preset: Scene3DPreset): string | null {
     dataUrl = null;
   }
 
-  // Dispose temporary scene resources cleanly to keep GPU memory flat across all 26 scenes
+  // Dispose temporary scene resources cleanly to keep GPU memory flat across all scenes
+  built.dispose?.();
   scene.traverse((obj) => {
-    if (obj instanceof THREE.Mesh) {
+    if (obj instanceof THREE.Mesh || obj instanceof THREE.Points || obj instanceof THREE.Line) {
       obj.geometry?.dispose();
       const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
       mats.forEach((m) => {

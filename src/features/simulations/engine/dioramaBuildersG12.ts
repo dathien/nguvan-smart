@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Scene3DPreset } from '../types';
 import { BuiltDioramaScene } from './dioramaBuildersG10';
+import { EnvironmentalEffectsManager } from '../effects/EnvironmentalEffects';
 import {
   createAnimatedOceanSurface,
   createArticulatedFigure,
@@ -20,6 +21,7 @@ import {
 
 export function buildGrade12AndSkillDiorama(preset: Scene3DPreset): BuiltDioramaScene | null {
   const root = new THREE.Group();
+  const effects = new EnvironmentalEffectsManager();
 
   // 21. Tây Tiến — Dramatic Northwest karst peaks & floating cloud veil, Pha Luông valley huts, winding Mã river + dugout canoe & Tây Tiến soldiers
   if (preset === 'tay-tien-mountains') {
@@ -69,9 +71,9 @@ export function buildGrade12AndSkillDiorama(preset: Scene3DPreset): BuiltDiorama
     tagHotspotGroup(valleyGroup, 'hs-21-2');
     root.add(valleyGroup);
 
-    // Winding Mã River & Châu Mộc dugout canoe
+    // Winding Mã River & Châu Mộc dugout canoe (GLSL RealisticWater)
     const riverContainer = new THREE.Group();
-    const { group: riverRibbon, waterTexture } = createWindingRiver({
+    const { group: riverRibbon, waterMaterial } = createWindingRiver({
       points: [
         [-5.8, 3.6],
         [-1.6, 2.9],
@@ -82,6 +84,9 @@ export function buildGrade12AndSkillDiorama(preset: Scene3DPreset): BuiltDiorama
       waterColor: 0x2379a3,
       bankColor: 0x6e9463,
     });
+    if (waterMaterial instanceof THREE.ShaderMaterial) {
+      effects.registerWater(waterMaterial);
+    }
     const canoe = createWoodenBoat(2.1, 0x5c3a21, 0xd97706, false, false);
     canoe.position.set(2.3, 0.1, 3.3);
     riverContainer.add(riverRibbon, canoe);
@@ -115,18 +120,21 @@ export function buildGrade12AndSkillDiorama(preset: Scene3DPreset): BuiltDiorama
     const t1 = createLayeredTree(0x14532d, 1.05);
     t1.position.set(4.2, 0, -0.4);
     root.add(t1);
+    effects.registerCloud(mistCloud, 0.48, 0.5, 0);
+    effects.collectWindCanopiesFromRoot(root);
 
     return {
       root,
       backdropColor: 0xe6eef6,
       fogDensity: 0.009,
+      effects,
       update: (t, _stage, params) => {
         const mist = (params.mountainMist ?? 55) / 100;
-        waterTexture.offset.y = -(t * 0.25) % 1;
         mistCloud.scale.setScalar(0.95 + mist * 0.75);
-        mistCloud.position.x = -2.1 + Math.sin(t * 0.55) * 0.5;
         canoe.position.y = 0.1 + Math.sin(t * 1.9) * 0.03;
+        effects.updateAmbient(t, 0.9);
       },
+      dispose: () => effects.dispose(),
     };
   }
 
@@ -310,9 +318,12 @@ export function buildGrade12AndSkillDiorama(preset: Scene3DPreset): BuiltDiorama
       root.add(leaf);
     }
 
+    effects.collectWindCanopiesFromRoot(root);
+
     return {
       root,
       backdropColor: 0xfaf5eb,
+      effects,
       update: (t, _stage, params) => {
         const density = (params.leafFall ?? 60) / 100;
         leaves.forEach((leaf, idx) => {
@@ -321,7 +332,9 @@ export function buildGrade12AndSkillDiorama(preset: Scene3DPreset): BuiltDiorama
           leaf.rotation.y = t + idx;
           leaf.rotation.z = Math.sin(t * 2 + idx) * 0.5;
         });
+        effects.updateAmbient(t, 0.9);
       },
+      dispose: () => effects.dispose(),
     };
   }
 
@@ -400,16 +413,21 @@ export function buildGrade12AndSkillDiorama(preset: Scene3DPreset): BuiltDiorama
     tagHotspotGroup(flowerGroup, 'hs-24-4');
     root.add(flowerGroup);
 
+    effects.collectWindCanopiesFromRoot(root);
+
     return {
       root,
       backdropColor: 0xf0f6eb,
+      effects,
       update: (t, stageIndex, params) => {
         const bloom = ((params.blossomRatio ?? 70) / 100) * (stageIndex === 2 ? 1.15 : stageIndex === 1 ? 0.55 : 0.22);
         stems.forEach((s, i) => {
           s.scale.setScalar(0.28 + bloom * 0.92);
           s.rotation.z = Math.sin(t * 1.8 + i) * 0.08;
         });
+        effects.updateAmbient(t, 0.85);
       },
+      dispose: () => effects.dispose(),
     };
   }
 

@@ -12,6 +12,8 @@ export type SimulationSkillDomain =
 
 export type QualityTier = 'economy' | 'standard' | 'high';
 
+export type LabelDisplayMode = 'explore' | 'presentation' | 'observe';
+
 export type Scene3DPreset =
   | 'myth-pillar'
   | 'temple-ghost'
@@ -73,6 +75,10 @@ export interface SimulationHotspot {
   position3D: [number, number, number];
   position2D: { x: number; y: number }; // 0..100 percent
   priority: 1 | 2 | 3; // 1 = primary
+  /** Optional 0-based stage indices where this object & label are active; undefined = all stages */
+  stageRange?: number[];
+  /** Optional extra padding (px) around this object's protected zone */
+  protectedPadding?: number;
   category: 'Không gian' | 'Nhân vật' | 'Chi tiết nghệ thuật' | 'Biểu tượng' | 'Lịch sử – Văn hóa' | 'Kiến thức';
   summary: string;
   textualDetail: string;

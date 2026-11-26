@@ -30,11 +30,16 @@ import {
 } from 'lucide-react';
 import { SIMULATION_CATALOG } from '../features/simulations/data/registry';
 import {
+  LabelDisplayMode,
   QualityTier,
   SimulationDefinition,
   SimulationHotspot,
   SimulationProgressRecord,
 } from '../features/simulations/types';
+import {
+  loadSavedLabelMode,
+  saveLabelMode,
+} from '../features/simulations/labels/SmartLabelManager';
 import {
   Simulation2DViewport,
   Simulation2DViewportHandle,
@@ -91,10 +96,15 @@ export default function SimulationViewerPage() {
   const [isPlaying, setIsPlaying] = useState(true);
   const [autoAdvance, setAutoAdvance] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
-  const [showLabels, setShowLabels] = useState(true);
+  const [labelMode, setLabelMode] = useState<LabelDisplayMode>(() => loadSavedLabelMode());
   const [qualityTier, setQualityTier] = useState<QualityTier>('standard');
   const [reducedMotion, setReducedMotion] = useState(false);
   const [params, setParams] = useState<Record<string, number>>({});
+
+  const handleChangeLabelMode = useCallback((nextMode: LabelDisplayMode) => {
+    setLabelMode(nextMode);
+    saveLabelMode(nextMode);
+  }, []);
 
   // Teacher presentation & classroom tools
   const [presentationMode, setPresentationMode] = useState(false);
@@ -295,8 +305,9 @@ export default function SimulationViewerPage() {
     if (!simulation) return;
     setStageIndex(0);
     setAutoAdvance(false);
+    setIsPlaying(true);
     setSelectedHotspotId(simulation.hotspots[0]?.id ?? null);
-    viewport3DRef.current?.resetCamera();
+    viewport3DRef.current?.resetScene();
     viewport2DRef.current?.resetView();
     const cleaned = await resetSimulationProgress(simulation.id);
     setProgress(cleaned);
@@ -711,8 +722,9 @@ export default function SimulationViewerPage() {
                   stageIndex={stageIndex}
                   selectedHotspotId={selectedHotspot?.id ?? null}
                   onSelectHotspot={handleSelectHotspot}
-                  showLabels={showLabels}
+                  labelMode={labelMode}
                   isPlaying={isPlaying}
+                  playbackSpeed={playbackSpeed}
                   reducedMotion={reducedMotion}
                   qualityTier={qualityTier}
                   params={params}
@@ -727,7 +739,7 @@ export default function SimulationViewerPage() {
                 onSelectStage={(idx) => setStageIndex(idx)}
                 selectedHotspotId={selectedHotspot?.id ?? null}
                 onSelectHotspot={handleSelectHotspot}
-                showLabels={showLabels}
+                labelMode={labelMode}
                 onSpeak={(txt) => speech.speak(txt)}
               />
             )}
@@ -801,138 +813,199 @@ export default function SimulationViewerPage() {
               </div>
             )}
 
-            {/* Playback & Accessibility Control Strip */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={stageIndex === 0}
-                  onClick={() => setStageIndex((s) => Math.max(0, s - 1))}
-                  className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[14px] font-bold text-[#0F2942] hover:bg-slate-50 disabled:opacity-40"
-                >
-                  <SkipBack className="h-4 w-4" />
-                  <span>Trước</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (autoAdvance) {
-                      setAutoAdvance(false);
-                    } else {
-                      setIsPlaying(true);
-                      setAutoAdvance(true);
+            {/* Playback, Smart Label Mode & Accessibility Control Strip */}
+            <div className="space-y-2.5 pt-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={stageIndex === 0}
+                    onClick={() => setStageIndex((s) => Math.max(0, s - 1))}
+                    className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[14px] font-bold text-[#0F2942] hover:bg-slate-50 disabled:opacity-40"
+                  >
+                    <SkipBack className="h-4 w-4" />
+                    <span>Trước</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsPlaying((p) => !p)}
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[14px] font-bold transition ${
+                      isPlaying
+                        ? 'bg-[#1D63ED] text-white hover:bg-blue-700'
+                        : 'bg-amber-500 text-white hover:bg-amber-600'
+                    }`}
+                  >
+                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                    <span>{isPlaying ? 'Tạm dừng' : 'Tiếp tục'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (autoAdvance) {
+                        setAutoAdvance(false);
+                      } else {
+                        setIsPlaying(true);
+                        setAutoAdvance(true);
+                      }
+                    }}
+                    className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[14px] font-bold transition ${
+                      autoAdvance
+                        ? 'border-[#0F2942] bg-[#0F2942] text-white'
+                        : 'border-slate-200 bg-white text-[#0F2942] hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>{autoAdvance ? 'Dừng tự chạy' : 'Tự chạy chặng'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={stageIndex >= simulation.stages.length - 1}
+                    onClick={() =>
+                      setStageIndex((s) => Math.min(simulation.stages.length - 1, s + 1))
                     }
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2942] px-3.5 py-2 text-[14px] font-bold text-white hover:bg-slate-800"
-                >
-                  {autoAdvance ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                  <span>{autoAdvance ? 'Tạm dừng tự chạy' : 'Tự chạy các chặng'}</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={stageIndex >= simulation.stages.length - 1}
-                  onClick={() =>
-                    setStageIndex((s) => Math.min(simulation.stages.length - 1, s + 1))
-                  }
-                  className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[14px] font-bold text-[#0F2942] hover:bg-slate-50 disabled:opacity-40"
-                >
-                  <span>Sau</span>
-                  <SkipForward className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    viewport3DRef.current?.resetCamera();
-                    viewport2DRef.current?.resetView();
-                  }}
-                  className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[14px] font-semibold text-slate-700 hover:bg-slate-50"
-                  title="Đặt lại góc nhìn"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  <span>Góc nhìn gốc</span>
-                </button>
+                    className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[14px] font-bold text-[#0F2942] hover:bg-slate-50 disabled:opacity-40"
+                  >
+                    <span>Sau</span>
+                    <SkipForward className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAutoAdvance(false);
+                      setStageIndex(0);
+                      setIsPlaying(true);
+                      viewport3DRef.current?.resetScene();
+                      viewport2DRef.current?.resetView();
+                    }}
+                    className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[14px] font-semibold text-slate-700 hover:bg-slate-50"
+                    title="Đặt lại góc nhìn và diễn biến cảnh"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    <span>Làm lại</span>
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => speech.setShowCaption((v) => !v)}
+                    className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[14px] font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    {speech.state.showCaption ? (
+                      <EyeOff className="h-4 w-4 text-slate-600" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-[#1D63ED]" />
+                    )}
+                    <span>{speech.state.showCaption ? 'Ẩn chú thích' : 'Hiện chú thích'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={speech.toggleMute}
+                    className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[14px] font-semibold text-slate-700 hover:bg-slate-50"
+                    title={speech.state.muted ? 'Bật âm thanh lời dẫn' : 'Tắt âm thanh lời dẫn'}
+                  >
+                    {speech.state.muted ? (
+                      <VolumeX className="h-4 w-4 text-rose-600" />
+                    ) : (
+                      <Volume2 className="h-4 w-4 text-[#1D63ED]" />
+                    )}
+                    <span>{speech.state.muted ? 'Tắt tiếng' : 'Lời dẫn'}</span>
+                  </button>
+
+                  <select
+                    aria-label="Tốc độ diễn hoạt"
+                    value={playbackSpeed}
+                    onChange={(e) => {
+                      const sp = Number(e.target.value);
+                      setPlaybackSpeed(sp);
+                      speech.setRate(Math.min(1.5, Math.max(0.75, sp)));
+                    }}
+                    className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[14px] font-bold text-slate-700"
+                  >
+                    <option value={0.5}>0.5x</option>
+                    <option value={0.75}>0.75x</option>
+                    <option value={1}>1.0x</option>
+                    <option value={1.5}>1.5x</option>
+                    <option value={2}>2.0x</option>
+                  </select>
+
+                  {viewMode === '3d' && has3D && (
+                    <select
+                      aria-label="Chất lượng hiệu ứng 3D"
+                      value={qualityTier}
+                      onChange={(e) => setQualityTier(e.target.value as QualityTier)}
+                      className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[14px] font-bold text-slate-700"
+                    >
+                      <option value="economy">Hiệu ứng: Thấp</option>
+                      <option value="standard">Hiệu ứng: Trung bình</option>
+                      <option value="high">Hiệu ứng: Cao</option>
+                    </select>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setReducedMotion((v) => !v)}
+                    className={`rounded-xl border px-2.5 py-2 text-[14px] font-bold ${
+                      reducedMotion
+                        ? 'border-amber-300 bg-amber-50 text-amber-900'
+                        : 'border-slate-200 bg-white text-slate-600'
+                    }`}
+                  >
+                    {reducedMotion ? 'Đã giảm chuyển động' : 'Giảm chuyển động'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleToggleFullscreen}
+                    className="rounded-xl border border-slate-200 bg-white p-2 text-slate-700 hover:bg-slate-50"
+                    title="Toàn màn hình"
+                  >
+                    {document.fullscreenElement ? (
+                      <Minimize2 className="h-4 w-4" />
+                    ) : (
+                      <Maximize2 className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setShowLabels((v) => !v)}
-                  className={`inline-flex items-center gap-1 rounded-xl border px-3 py-2 text-[14px] font-bold ${
-                    showLabels
-                      ? 'border-blue-200 bg-blue-50 text-[#1D63ED]'
-                      : 'border-slate-200 bg-white text-slate-600'
-                  }`}
+              {/* 3-Mode Smart Stable Label Selector */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/90 bg-slate-50 px-3 py-2">
+                <div className="inline-flex items-center gap-1.5 text-[14px] font-bold text-[#0F2942]">
+                  <Tag className="h-4 w-4 text-[#1D63ED]" />
+                  <span>Chế độ nhãn 3D/2D:</span>
+                </div>
+                <div
+                  className="inline-flex flex-wrap items-center gap-1.5"
+                  role="radiogroup"
+                  aria-label="Chế độ hiển thị nhãn"
                 >
-                  <Tag className="h-4 w-4" />
-                  <span>{showLabels ? 'Đang hiện nhãn' : 'Đã ẩn nhãn'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={speech.toggleMute}
-                  className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[14px] font-semibold text-slate-700 hover:bg-slate-50"
-                  title={speech.state.muted ? 'Bật âm thanh lời dẫn' : 'Tắt âm thanh lời dẫn'}
-                >
-                  {speech.state.muted ? (
-                    <VolumeX className="h-4 w-4 text-rose-600" />
-                  ) : (
-                    <Volume2 className="h-4 w-4 text-[#1D63ED]" />
-                  )}
-                  <span>{speech.state.muted ? 'Tắt tiếng' : 'Lời dẫn'}</span>
-                </button>
-
-                <select
-                  aria-label="Tốc độ chuyển chặng"
-                  value={playbackSpeed}
-                  onChange={(e) => {
-                    const sp = Number(e.target.value);
-                    setPlaybackSpeed(sp);
-                    speech.setRate(sp);
-                  }}
-                  className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[13px] font-bold text-slate-700"
-                >
-                  <option value={0.75}>0.75x</option>
-                  <option value={1}>1.0x</option>
-                  <option value={1.25}>1.25x</option>
-                </select>
-
-                {viewMode === '3d' && has3D && (
-                  <select
-                    aria-label="Chất lượng đồ họa 3D"
-                    value={qualityTier}
-                    onChange={(e) => setQualityTier(e.target.value as QualityTier)}
-                    className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[13px] font-bold text-slate-700"
-                  >
-                    <option value="economy">Tiết kiệm</option>
-                    <option value="standard">Chuẩn</option>
-                    <option value="high">Cao</option>
-                  </select>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setReducedMotion((v) => !v)}
-                  className={`rounded-xl border px-2.5 py-2 text-[13px] font-bold ${
-                    reducedMotion
-                      ? 'border-amber-300 bg-amber-50 text-amber-900'
-                      : 'border-slate-200 bg-white text-slate-600'
-                  }`}
-                >
-                  {reducedMotion ? 'Đã giảm chuyển động' : 'Giảm chuyển động'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleToggleFullscreen}
-                  className="rounded-xl border border-slate-200 bg-white p-2 text-slate-700 hover:bg-slate-50"
-                  title="Toàn màn hình"
-                >
-                  {document.fullscreenElement ? (
-                    <Minimize2 className="h-4 w-4" />
-                  ) : (
-                    <Maximize2 className="h-4 w-4" />
-                  )}
-                </button>
+                  {(
+                    [
+                      { id: 'explore' as LabelDisplayMode, label: 'Khám phá' },
+                      { id: 'presentation' as LabelDisplayMode, label: 'Trình chiếu' },
+                      { id: 'observe' as LabelDisplayMode, label: 'Quan sát mô hình' },
+                    ] as const
+                  ).map((item) => {
+                    const active = labelMode === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => handleChangeLabelMode(item.id)}
+                        className={`rounded-lg px-3 py-1.5 text-[14px] font-bold transition-colors ${
+                          active
+                            ? 'bg-[#1D63ED] text-white shadow-xs'
+                            : 'border border-slate-200 bg-white text-slate-700 hover:bg-blue-50 hover:text-[#1D63ED]'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>

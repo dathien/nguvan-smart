@@ -115,6 +115,8 @@ export default function App() {
             />
             <Route path="/kham-pha-2d-3d" element={<div className="px-4 sm:px-6 lg:px-8 py-6"><SimulationsCatalogPage /></div>} />
             <Route path="/kham-pha-2d-3d/:simId" element={<div className="px-4 sm:px-6 lg:px-8 py-5"><SimulationViewerPage /></div>} />
+            <Route path="/kham-pha-ngu-van" element={<div className="px-4 sm:px-6 lg:px-8 py-6"><SimulationsCatalogPage /></div>} />
+            <Route path="/kham-pha-ngu-van/:simId" element={<div className="px-4 sm:px-6 lg:px-8 py-5"><SimulationViewerPage /></div>} />
             <Route path="/huong-dan-su-dung" element={<div className="px-4 sm:px-6 lg:px-8 py-6"><UserGuidePage /></div>} />
             <Route path="/soan-de" element={<ExamEditorPage />} />
             <Route path="/ma-tran-dac-ta" element={<MatrixSpecPage />} />

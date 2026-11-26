@@ -2,15 +2,27 @@ import React, { useEffect, useImperativeHandle, useMemo, useRef, useState } from
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { QualityTier, SimulationDefinition, SimulationHotspot } from '../types';
-import { PlacedLabel, RawLabelPoint, resolveLabelCollisions } from '../utils/labelLayout';
+import {
+  LabelDisplayMode,
+  QualityTier,
+  SimulationDefinition,
+  SimulationHotspot,
+} from '../types';
 import { buildGrade10Diorama, BuiltDioramaScene } from '../engine/dioramaBuildersG10';
 import { buildGrade11Diorama } from '../engine/dioramaBuildersG11';
 import { buildGrade12AndSkillDiorama } from '../engine/dioramaBuildersG12';
 import { createSelectionRing } from '../engine/dioramaPrimitives';
+import {
+  AnimationController,
+  CameraController,
+  DynamicLightingRig,
+  SceneTransitionManager,
+} from '../engine/StorytellingEngine';
+import { SmartLabelManager, StableLabelFrameState } from '../labels/SmartLabelManager';
 
 export interface Simulation3DViewportHandle {
   resetCamera: () => void;
+  resetScene: () => void;
   capturePng: () => string | null;
 }
 
@@ -19,8 +31,9 @@ interface Simulation3DViewportProps {
   stageIndex: number;
   selectedHotspotId: string | null;
   onSelectHotspot: (hotspot: SimulationHotspot) => void;
-  showLabels: boolean;
+  labelMode: LabelDisplayMode;
   isPlaying: boolean;
+  playbackSpeed: number;
   reducedMotion: boolean;
   qualityTier: QualityTier;
   params: Record<string, number>;
@@ -38,27 +51,6 @@ function detectSoftwareWebGL(gl: WebGLRenderingContext | WebGL2RenderingContext)
   }
 }
 
-/**
- * Collects the top-most tagged Object3D nodes for every hotspotId inside a built diorama root.
- * Enables true live Box3 world-space label anchoring and accurate selection ring footprint sizing.
- */
-function collectHotspotObjects(root: THREE.Group): Map<string, THREE.Object3D[]> {
-  const map = new Map<string, THREE.Object3D[]>();
-  const visit = (node: THREE.Object3D, parentHotspotId?: string) => {
-    const hsId = typeof node.userData?.hotspotId === 'string' ? node.userData.hotspotId : undefined;
-    if (hsId && hsId !== parentHotspotId) {
-      const list = map.get(hsId);
-      if (list) list.push(node);
-      else map.set(hsId, [node]);
-    }
-    for (const child of node.children) {
-      visit(child, hsId ?? parentHotspotId);
-    }
-  };
-  visit(root);
-  return map;
-}
-
 export const Simulation3DViewport = React.forwardRef<
   Simulation3DViewportHandle,
   Simulation3DViewportProps
@@ -69,8 +61,9 @@ export const Simulation3DViewport = React.forwardRef<
       stageIndex,
       selectedHotspotId,
       onSelectHotspot,
-      showLabels,
+      labelMode,
       isPlaying,
+      playbackSpeed,
       reducedMotion,
       qualityTier,
       params,
@@ -80,27 +73,37 @@ export const Simulation3DViewport = React.forwardRef<
   ) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-    const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
-    const controlsRef = useRef<OrbitControls | null>(null);
-    const selectionRingRef = useRef<THREE.Mesh | null>(null);
-    const hotspotObjectsRef = useRef<Map<string, THREE.Object3D[]>>(new Map());
-    const desiredTargetRef = useRef<THREE.Vector3 | null>(null);
-    const defaultOrthoZoomRef = useRef<number>(1.0);
+    const cameraControllerRef = useRef<CameraController | null>(null);
+    const animControllerRef = useRef<AnimationController>(new AnimationController());
+    const labelManagerRef = useRef<SmartLabelManager>(new SmartLabelManager());
+    const forceSceneSyncRef = useRef<boolean>(true);
     const [webglError, setWebglError] = useState<string | null>(null);
-    const [resolvedLabels, setResolvedLabels] = useState<PlacedLabel[]>([]);
+
+    // Direct DOM refs for zero-jitter, zero-React-re-render 60fps label & leader-line updates
+    const labelButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+    const svgGroupRefs = useRef<Map<string, SVGGElement>>(new Map());
+    const svgLineRefs = useRef<Map<string, SVGLineElement>>(new Map());
+    const svgDotRefs = useRef<Map<string, SVGCircleElement>>(new Map());
 
     const stageIndexRef = useRef(stageIndex);
     const selectedIdRef = useRef(selectedHotspotId);
-    const showLabelsRef = useRef(showLabels);
+    const labelModeRef = useRef(labelMode);
     const isPlayingRef = useRef(isPlaying);
+    const playbackSpeedRef = useRef(playbackSpeed);
     const reducedMotionRef = useRef(reducedMotion);
     const paramsRef = useRef(params);
     const onSelectHotspotRef = useRef(onSelectHotspot);
 
+    // Trigger one-shot diorama sync whenever stage or params change (even when paused)
+    if (stageIndexRef.current !== stageIndex || paramsRef.current !== params) {
+      forceSceneSyncRef.current = true;
+    }
+
     stageIndexRef.current = stageIndex;
     selectedIdRef.current = selectedHotspotId;
-    showLabelsRef.current = showLabels;
+    labelModeRef.current = labelMode;
     isPlayingRef.current = isPlaying;
+    playbackSpeedRef.current = playbackSpeed;
     reducedMotionRef.current = reducedMotion;
     paramsRef.current = params;
     onSelectHotspotRef.current = onSelectHotspot;
@@ -113,14 +116,13 @@ export const Simulation3DViewport = React.forwardRef<
 
     useImperativeHandle(ref, () => ({
       resetCamera: () => {
-        desiredTargetRef.current = null;
-        if (cameraRef.current && controlsRef.current) {
-          cameraRef.current.position.set(13.8, 11.4, 13.8);
-          cameraRef.current.zoom = defaultOrthoZoomRef.current;
-          cameraRef.current.updateProjectionMatrix();
-          controlsRef.current.target.set(0, 1.0, 0);
-          controlsRef.current.update();
-        }
+        cameraControllerRef.current?.reset();
+      },
+      resetScene: () => {
+        animControllerRef.current.reset();
+        labelManagerRef.current.resetCache();
+        cameraControllerRef.current?.reset();
+        forceSceneSyncRef.current = true;
       },
       capturePng: () => {
         const renderer = rendererRef.current;
@@ -133,55 +135,24 @@ export const Simulation3DViewport = React.forwardRef<
       },
     }));
 
-    // Smoothly focus camera target toward the real selected object's world center
+    // Smoothly focus camera target toward the real selected object's anchor
     useEffect(() => {
       if (!selectedHotspotId) return;
-      const objs = hotspotObjectsRef.current.get(selectedHotspotId);
-      if (objs && objs.length > 0) {
-        const box = new THREE.Box3();
-        const subBox = new THREE.Box3();
-        let hasAny = false;
-        for (const obj of objs) {
-          if (!obj.visible) continue;
-          subBox.setFromObject(obj);
-          if (!subBox.isEmpty()) {
-            if (!hasAny) {
-              box.copy(subBox);
-              hasAny = true;
-            } else {
-              box.union(subBox);
-            }
-          }
-        }
-        if (hasAny) {
-          const center = new THREE.Vector3();
-          box.getCenter(center);
-          desiredTargetRef.current = new THREE.Vector3(
-            center.x * 0.42,
-            Math.max(0.7, Math.min(2.2, center.y * 0.65)),
-            center.z * 0.42
-          );
-          return;
-        }
-      }
       const hs = hotspotMap.get(selectedHotspotId);
-      if (hs) {
-        desiredTargetRef.current = new THREE.Vector3(
-          hs.position3D[0] * 0.4,
-          Math.max(0.7, hs.position3D[1] * 0.55),
-          hs.position3D[2] * 0.4
-        );
-      }
+      if (!hs || !cameraControllerRef.current) return;
+      const tmp = new THREE.Vector3();
+      labelManagerRef.current.anchors.getWorldAnchor(hs, tmp);
+      cameraControllerRef.current.focusPoint(tmp.x, tmp.y, tmp.z);
     }, [selectedHotspotId, hotspotMap]);
 
     // Smoothly focus OrbitControls target toward current stage focus
     useEffect(() => {
       const stage = simulation.stages[stageIndex];
-      if (stage) {
-        desiredTargetRef.current = new THREE.Vector3(
-          stage.cameraTarget[0] * 0.42,
-          Math.max(0.65, stage.cameraTarget[1] * 0.52),
-          stage.cameraTarget[2] * 0.42
+      if (stage && cameraControllerRef.current) {
+        cameraControllerRef.current.focusPoint(
+          stage.cameraTarget[0],
+          stage.cameraTarget[1],
+          stage.cameraTarget[2]
         );
       }
     }, [stageIndex, simulation.stages]);
@@ -206,12 +177,18 @@ export const Simulation3DViewport = React.forwardRef<
 
       const gl = renderer.getContext();
       const isSoftwareGl = detectSoftwareWebGL(gl);
-      const maxDpr = isSoftwareGl ? 1 : qualityTier === 'high' ? 2 : qualityTier === 'standard' ? 1.5 : 1;
+      const maxDpr = isSoftwareGl
+        ? 1
+        : qualityTier === 'high'
+        ? 2
+        : qualityTier === 'standard'
+        ? 1.5
+        : 1;
 
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.05;
+      renderer.toneMappingExposure = 1.06;
       renderer.shadowMap.enabled = !isSoftwareGl && qualityTier !== 'economy';
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       rendererRef.current = renderer;
@@ -222,7 +199,6 @@ export const Simulation3DViewport = React.forwardRef<
       container.innerHTML = '';
       container.appendChild(renderer.domElement);
 
-      // WebGL context loss resilience
       const onContextLost = (e: Event) => {
         e.preventDefault();
       };
@@ -239,6 +215,8 @@ export const Simulation3DViewport = React.forwardRef<
         buildGrade12AndSkillDiorama(preset) ||
         buildGrade10Diorama('myth-pillar')!;
 
+      built.setQuality?.(qualityTier);
+
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(built.backdropColor);
       if (built.fogDensity && built.fogDensity > 0) {
@@ -248,7 +226,7 @@ export const Simulation3DViewport = React.forwardRef<
       const pmrem = new THREE.PMREMGenerator(renderer);
       const envTarget = pmrem.fromScene(new RoomEnvironment(), 0.04);
       scene.environment = envTarget.texture;
-      scene.environmentIntensity = built.ambientIntensity ? 0.36 : 0.62;
+      scene.environmentIntensity = built.ambientIntensity ? 0.38 : 0.62;
 
       const hemiLight = new THREE.HemisphereLight(
         0xf8fbff,
@@ -282,14 +260,27 @@ export const Simulation3DViewport = React.forwardRef<
 
       scene.add(built.root);
 
-      // Index all real 3D hotspot objects once for live Box3 anchoring
-      const objMap = collectHotspotObjects(built.root);
-      hotspotObjectsRef.current = objMap;
+      const lightingRig = new DynamicLightingRig(scene, hemiLight, dirLight);
+      const transitionMgr = new SceneTransitionManager();
+      const animCtrl = animControllerRef.current;
+      animCtrl.reset();
+      forceSceneSyncRef.current = true;
+
+      // Initial scene pose before indexing static anchors so stage-0 rest pose is accurate
+      built.update(0, stageIndexRef.current, paramsRef.current, 0.016);
+      const initialMood = built.getStageMood?.(stageIndexRef.current);
+      if (initialMood) {
+        lightingRig.applyMood(initialMood, 1.0);
+      }
+
+      // Index explicit static anchors, hotspot roots, and ProtectedObjectAreas ONCE
+      const labelManager = labelManagerRef.current;
+      labelManager.resetCache();
+      labelManager.anchors.indexScene(built.root);
 
       const selectionRing = createSelectionRing(1.0);
       selectionRing.visible = false;
       scene.add(selectionRing);
-      selectionRingRef.current = selectionRing;
 
       const aspect = width / height;
       const frustumSize = 11.8;
@@ -301,12 +292,6 @@ export const Simulation3DViewport = React.forwardRef<
         0.1,
         120
       );
-      camera.position.set(13.8, 11.4, 13.8);
-      camera.lookAt(0, 1.0, 0);
-      defaultOrthoZoomRef.current = width < 520 ? 0.78 : 0.94;
-      camera.zoom = defaultOrthoZoomRef.current;
-      camera.updateProjectionMatrix();
-      cameraRef.current = camera;
 
       // Pre-compile shaders to prevent first-frame stall
       renderer.compile(scene, camera);
@@ -318,13 +303,13 @@ export const Simulation3DViewport = React.forwardRef<
       controls.maxZoom = 2.4;
       controls.maxPolarAngle = Math.PI / 2.18;
       controls.minPolarAngle = Math.PI / 6;
-      controls.target.set(0, 1.0, 0);
-      controls.update();
-      controlsRef.current = controls;
 
-      // Cancel smooth camera transition immediately whenever the user starts dragging/zooming
+      const cameraCtrl = new CameraController(camera, controls);
+      cameraCtrl.configureDefault(width);
+      cameraControllerRef.current = cameraCtrl;
+
       const onControlStart = () => {
-        desiredTargetRef.current = null;
+        cameraCtrl.cancelFocus();
       };
       controls.addEventListener('start', onControlStart);
 
@@ -339,8 +324,12 @@ export const Simulation3DViewport = React.forwardRef<
         raycaster.setFromCamera(pointer, camera);
         const hits = raycaster.intersectObjects(built.root.children, true);
         for (const hit of hits) {
-          const hsId = hit.object.userData?.hotspotId;
-          if (typeof hsId === 'string') return hsId;
+          let cur: THREE.Object3D | null = hit.object;
+          while (cur && cur !== built.root) {
+            const hsId = cur.userData?.hotspotId;
+            if (typeof hsId === 'string') return hsId;
+            cur = cur.parent;
+          }
         }
         return null;
       };
@@ -381,63 +370,35 @@ export const Simulation3DViewport = React.forwardRef<
       const resizeObserver = new ResizeObserver(handleResize);
       resizeObserver.observe(container);
 
-      // Pre-allocated scratch math objects (ZERO per-frame allocations)
-      const projVec = new THREE.Vector3();
+      // Scratch objects (zero per-frame allocations)
       const tmpBox = new THREE.Box3();
       const tmpSubBox = new THREE.Box3();
       const tmpCenter = new THREE.Vector3();
       const tmpSize = new THREE.Vector3();
-      let lastLabelSync = 0;
+      const visibleLookup = new Map<string, StableLabelFrameState>();
+      const stageHighlightSet = new Set<string>();
 
-      /**
-       * Computes live world Box3 bounds for any hotspotId from its real 3D Object3D meshes.
-       */
-      const computeLiveHotspotBounds = (
-        hs: SimulationHotspot,
-        outCenter: THREE.Vector3,
-        outSize: THREE.Vector3
-      ): number => {
-        const objs = objMap.get(hs.id);
-        if (objs && objs.length > 0) {
-          let hasAny = false;
-          for (let i = 0; i < objs.length; i++) {
-            const obj = objs[i];
-            if (!obj.visible) continue;
-            tmpSubBox.setFromObject(obj);
-            if (!tmpSubBox.isEmpty()) {
-              if (!hasAny) {
-                tmpBox.copy(tmpSubBox);
-                hasAny = true;
-              } else {
-                tmpBox.union(tmpSubBox);
-              }
-            }
-          }
-          if (hasAny) {
-            tmpBox.getCenter(outCenter);
-            tmpBox.getSize(outSize);
-            return tmpBox.max.y;
-          }
-        }
-        outCenter.set(hs.position3D[0], hs.position3D[1], hs.position3D[2]);
-        outSize.set(1.2, 1.2, 1.2);
-        return hs.position3D[1] + 0.45;
-      };
-
-      const projectLabels = (nowMs: number) => {
-        if (nowMs - lastLabelSync < (isSoftwareGl ? 130 : 42)) return;
-        lastLabelSync = nowMs;
-
-        // Also update live selection ring directly to the selected object's real world footprint
+      const applyStableLabelsToDOM = (rawDt: number) => {
         const selId = selectedIdRef.current;
-        if (selId) {
+        const curStageIdx = stageIndexRef.current;
+
+        // Update selection footprint halo ring directly on floor
+        if (selId && labelModeRef.current !== 'observe') {
           const selHs = simulation.hotspots.find((h) => h.id === selId);
-          if (selHs) {
-            computeLiveHotspotBounds(selHs, tmpCenter, tmpSize);
+          const inStage =
+            selHs &&
+            (!selHs.stageRange || selHs.stageRange.length === 0 || selHs.stageRange.includes(curStageIdx));
+          if (selHs && inStage && labelManager.anchors.isObjectVisible(selHs.id)) {
+            const radius = labelManager.anchors.getSelectionFootprint(
+              selHs,
+              tmpCenter,
+              tmpBox,
+              tmpSubBox,
+              tmpSize
+            );
             selectionRing.visible = true;
             selectionRing.position.set(tmpCenter.x, 0.065, tmpCenter.z);
-            const footprintRadius = Math.max(0.65, Math.min(2.2, Math.max(tmpSize.x, tmpSize.z) * 0.54));
-            selectionRing.userData.baseScale = footprintRadius;
+            selectionRing.userData.baseScale = radius;
           } else {
             selectionRing.visible = false;
           }
@@ -445,50 +406,88 @@ export const Simulation3DViewport = React.forwardRef<
           selectionRing.visible = false;
         }
 
-        if (!showLabelsRef.current) {
-          setResolvedLabels([]);
-          return;
-        }
-
         const w = container.clientWidth || 720;
         const h = container.clientHeight || 480;
-        const activeStage = simulation.stages[stageIndexRef.current];
-        const stageHighlighted = new Set(activeStage?.highlightHotspotIds ?? []);
 
-        const candidates: RawLabelPoint[] = simulation.hotspots.map((hs) => {
-          const topY = computeLiveHotspotBounds(hs, tmpCenter, tmpSize);
-          // Anchor precisely near the visual upper crown of the real 3D object
-          const anchorYWorld =
-            tmpSize.y < 0.45
-              ? topY + 0.16 // flat feature like river/lane
-              : tmpCenter.y + tmpSize.y * 0.36;
-          projVec.set(tmpCenter.x, anchorYWorld, tmpCenter.z);
-          projVec.project(camera);
+        stageHighlightSet.clear();
+        const activeStage = simulation.stages[curStageIdx];
+        if (activeStage) {
+          for (let i = 0; i < activeStage.highlightHotspotIds.length; i++) {
+            stageHighlightSet.add(activeStage.highlightHotspotIds[i]);
+          }
+        }
 
-          const x = (projVec.x * 0.5 + 0.5) * w;
-          const y = (-projVec.y * 0.5 + 0.5) * h;
-          const isSelected = hs.id === selId;
-          const isPrimary = hs.priority === 1 || stageHighlighted.has(hs.id);
-          const occluded = !(projVec.z <= 1.0 && x > -30 && x < w + 30 && y > -30 && y < h + 30);
-          return {
-            id: hs.id,
-            text: hs.shortLabel || hs.label,
-            anchorX: x,
-            anchorY: y,
-            priority: isPrimary ? 1 : hs.priority,
-            isSelected,
-            occluded,
-          };
+        const states = labelManager.computeFrame({
+          hotspots: simulation.hotspots,
+          stageIndex: curStageIdx,
+          stageHighlightIds: stageHighlightSet,
+          selectedHotspotId: selId,
+          mode: labelModeRef.current,
+          camera,
+          viewportWidth: w,
+          viewportHeight: h,
+          dt: rawDt,
         });
 
-        const maxVisible = w < 640 ? 4 : 6;
-        const resolved = resolveLabelCollisions(candidates, w, h, { maxVisibleLabels: maxVisible });
-        setResolvedLabels(resolved.filter((item) => item.visible));
+        visibleLookup.clear();
+        for (let i = 0; i < states.length; i++) {
+          visibleLookup.set(states[i].id, states[i]);
+        }
+
+        for (let i = 0; i < simulation.hotspots.length; i++) {
+          const hs = simulation.hotspots[i];
+          const st = visibleLookup.get(hs.id);
+          const btn = labelButtonRefs.current.get(hs.id);
+          const svgG = svgGroupRefs.current.get(hs.id);
+          const svgLine = svgLineRefs.current.get(hs.id);
+          const svgDot = svgDotRefs.current.get(hs.id);
+
+          if (st && st.visible) {
+            const lx = Math.round(st.labelX);
+            const ly = Math.round(st.labelY);
+            const ax = Math.round(st.anchorX);
+            const ay = Math.round(st.anchorY);
+
+            if (btn) {
+              btn.style.transform = `translate3d(${lx}px, ${ly}px, 0) translate(-50%, -50%)`;
+              btn.style.opacity = '1';
+              btn.style.pointerEvents = 'auto';
+              btn.style.zIndex = st.isSelected ? '20' : '10';
+            }
+
+            if (svgG) {
+              svgG.style.opacity = '1';
+            }
+            if (svgLine) {
+              const dist = Math.hypot(lx - ax, ly - ay);
+              if (dist >= 16) {
+                svgLine.setAttribute('x1', String(ax));
+                svgLine.setAttribute('y1', String(ay));
+                svgLine.setAttribute('x2', String(lx));
+                svgLine.setAttribute('y2', String(ly));
+                svgLine.style.opacity = '1';
+              } else {
+                svgLine.style.opacity = '0';
+              }
+            }
+            if (svgDot) {
+              svgDot.setAttribute('cx', String(ax));
+              svgDot.setAttribute('cy', String(ay));
+            }
+          } else {
+            if (btn) {
+              btn.style.opacity = '0';
+              btn.style.pointerEvents = 'none';
+            }
+            if (svgG) {
+              svgG.style.opacity = '0';
+            }
+          }
+        }
       };
 
       let stopped = false;
       let rafId = 0;
-      let elapsed = 0;
       let lastTime = performance.now();
 
       const afterDraw = (cb: () => void) => {
@@ -521,34 +520,43 @@ export const Simulation3DViewport = React.forwardRef<
       const renderFrame = () => {
         if (stopped) return;
         const now = performance.now();
-        const dt = Math.min(0.05, (now - lastTime) / 1000);
+        const rawDt = Math.min(0.05, (now - lastTime) / 1000);
         lastTime = now;
 
-        if (isPlayingRef.current && !reducedMotionRef.current) {
-          elapsed += dt;
-        }
-        built.update(elapsed, stageIndexRef.current, paramsRef.current);
+        animCtrl.isPlaying = isPlayingRef.current;
+        animCtrl.speed = playbackSpeedRef.current;
+        const scaledDt = animCtrl.tick(rawDt, reducedMotionRef.current);
 
-        // Smoothly damp OrbitControls target toward selected object/stage without fighting user drag
-        const desired = desiredTargetRef.current;
-        if (desired) {
-          controls.target.x = THREE.MathUtils.damp(controls.target.x, desired.x, 5.5, dt);
-          controls.target.y = THREE.MathUtils.damp(controls.target.y, desired.y, 5.5, dt);
-          controls.target.z = THREE.MathUtils.damp(controls.target.z, desired.z, 5.5, dt);
-          if (controls.target.distanceToSquared(desired) < 0.0005) {
-            desiredTargetRef.current = null;
-          }
+        transitionMgr.setStage(stageIndexRef.current);
+        transitionMgr.step(rawDt);
+
+        // Synchronous Pause: freeze ALL storytelling animations & fire/water/nature effects when paused,
+        // while still applying one-shot updates when stage or params change!
+        if (scaledDt > 0 || forceSceneSyncRef.current) {
+          built.update(animCtrl.elapsedSec, stageIndexRef.current, paramsRef.current, scaledDt);
+          forceSceneSyncRef.current = false;
         }
 
+        // Smooth stage mood lighting transition (runs on rawDt so stage switches stay responsive even when paused)
+        const mood = built.getStageMood?.(stageIndexRef.current);
+        if (mood) {
+          lightingRig.applyMood(mood, rawDt);
+        }
+
+        // Selection halo pulse pauses synchronously with storytelling playback
         if (selectionRing.visible) {
-          const baseScale = typeof selectionRing.userData.baseScale === 'number' ? selectionRing.userData.baseScale : 1;
-          const pulse = baseScale * (1 + Math.sin(now * 0.005) * 0.055);
+          const baseScale =
+            typeof selectionRing.userData.baseScale === 'number'
+              ? selectionRing.userData.baseScale
+              : 1;
+          const pulse = baseScale * (1 + Math.sin(animCtrl.elapsedSec * 4.5) * 0.05);
           selectionRing.scale.setScalar(pulse);
         }
 
-        controls.update();
+        // OrbitControls & CameraController ALWAYS remain active even when paused!
+        cameraCtrl.update(rawDt);
         renderer.render(scene, camera);
-        projectLabels(now);
+        applyStableLabelsToDOM(rawDt);
         afterDraw(renderFrame);
       };
 
@@ -567,9 +575,14 @@ export const Simulation3DViewport = React.forwardRef<
         controls.dispose();
         envTarget.dispose();
         pmrem.dispose();
+        built.dispose?.();
 
         scene.traverse((obj) => {
-          if (obj instanceof THREE.Mesh) {
+          if (
+            obj instanceof THREE.Mesh ||
+            obj instanceof THREE.Points ||
+            obj instanceof THREE.Line
+          ) {
             obj.geometry?.dispose();
             const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
             mats.forEach((m) => {
@@ -584,8 +597,16 @@ export const Simulation3DViewport = React.forwardRef<
         });
         renderer.dispose();
         rendererRef.current = null;
+        cameraControllerRef.current = null;
       };
-    }, [simulation.id, simulation.scene3DPreset, qualityTier, onWebGLFallback, simulation.hotspots]);
+    }, [
+      simulation.id,
+      simulation.scene3DPreset,
+      qualityTier,
+      onWebGLFallback,
+      simulation.hotspots,
+      simulation.stages,
+    ]);
 
     if (webglError) {
       return (
@@ -603,68 +624,82 @@ export const Simulation3DViewport = React.forwardRef<
           aria-label={`Mô phỏng 3D ${simulation.title}`}
         />
 
-        {/* Crisp SVG leader lines directly anchored to the real 3D objects */}
-        {showLabels && resolvedLabels.length > 0 && (
-          <svg
-            className="pointer-events-none absolute inset-0 h-full w-full"
-            aria-hidden="true"
-          >
-            {resolvedLabels.map((lbl) => {
-              const dist = Math.hypot(lbl.labelX - lbl.anchorX, lbl.labelY - lbl.anchorY);
-              const isSelected = lbl.id === selectedHotspotId;
-              return (
-                <g key={`line-${lbl.id}`}>
-                  {dist >= 16 && (
-                    <line
-                      x1={lbl.anchorX}
-                      y1={lbl.anchorY}
-                      x2={lbl.labelX}
-                      y2={lbl.labelY}
-                      stroke={isSelected ? '#1D63ED' : 'rgba(15, 41, 66, 0.42)'}
-                      strokeWidth={isSelected ? 2.2 : 1.5}
-                      strokeDasharray={isSelected ? undefined : '4 3'}
-                    />
-                  )}
-                  <circle
-                    cx={lbl.anchorX}
-                    cy={lbl.anchorY}
-                    r={isSelected ? 4.8 : 3.4}
-                    fill={isSelected ? '#1D63ED' : '#FFFFFF'}
-                    stroke="#0F2942"
-                    strokeWidth={1.6}
-                  />
-                </g>
-              );
-            })}
-          </svg>
-        )}
-
-        {/* Crisp Isometric Floating Labels anchored to real 3D objects */}
-        {showLabels &&
-          resolvedLabels.map((lbl) => {
-            const isSelected = lbl.id === selectedHotspotId;
-            const hotspot = hotspotMap.get(lbl.id);
-            if (!hotspot) return null;
+        {/* Direct-DOM SVG leader lines (zero per-frame React state updates) */}
+        <svg
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          aria-hidden="true"
+        >
+          {simulation.hotspots.map((hs) => {
+            const isSelected = hs.id === selectedHotspotId;
             return (
-              <button
-                key={lbl.id}
-                type="button"
-                onClick={() => onSelectHotspot(hotspot)}
-                style={{
-                  transform: `translate3d(${Math.round(lbl.labelX)}px, ${Math.round(lbl.labelY)}px, 0) translate(-50%, -50%)`,
+              <g
+                key={`line-${hs.id}`}
+                ref={(el) => {
+                  if (el) svgGroupRefs.current.set(hs.id, el);
+                  else svgGroupRefs.current.delete(hs.id);
                 }}
-                className={`absolute left-0 top-0 z-10 whitespace-nowrap rounded-xl px-3.5 py-1.5 text-[15px] font-bold leading-snug tracking-tight transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  isSelected
-                    ? 'bg-[#1D63ED] text-white shadow-[0_8px_20px_rgba(29,99,237,0.38)] ring-2 ring-white/85'
-                    : 'bg-white text-[#0F2942] shadow-[0_4px_14px_rgba(15,41,66,0.16)] border border-slate-200/90 hover:bg-blue-50 hover:text-[#1D63ED]'
-                }`}
+                style={{ opacity: 0 }}
               >
-                {lbl.text}
-              </button>
+                <line
+                  ref={(el) => {
+                    if (el) svgLineRefs.current.set(hs.id, el);
+                    else svgLineRefs.current.delete(hs.id);
+                  }}
+                  stroke={isSelected ? '#1D63ED' : 'rgba(15, 41, 66, 0.46)'}
+                  strokeWidth={isSelected ? 2.2 : 1.5}
+                  strokeDasharray={isSelected ? undefined : '4 3'}
+                />
+                <circle
+                  ref={(el) => {
+                    if (el) svgDotRefs.current.set(hs.id, el);
+                    else svgDotRefs.current.delete(hs.id);
+                  }}
+                  r={isSelected ? 4.8 : 3.5}
+                  fill={isSelected ? '#1D63ED' : '#FFFFFF'}
+                  stroke="#0F2942"
+                  strokeWidth={1.6}
+                />
+              </g>
             );
           })}
+        </svg>
 
-        <div className="pointer-events-none absolute bottom-3 left-3 z-10 rounded-lg bg-white/92 px-3 py-1.5 text-[13px] font-medium text-slate-700 shadow-sm border border-slate-200/80">
+        {/* Smart Stable Labels: fixed dimensions (zero size shift on select/hover), >=15px crisp Vietnamese font */}
+        {simulation.hotspots.map((hs) => {
+          const isSelected = hs.id === selectedHotspotId;
+          return (
+            <button
+              key={hs.id}
+              ref={(el) => {
+                if (el) labelButtonRefs.current.set(hs.id, el);
+                else labelButtonRefs.current.delete(hs.id);
+              }}
+              type="button"
+              onClick={() => onSelectHotspot(hs)}
+              style={{
+                opacity: 0,
+                pointerEvents: 'none',
+                transform: 'translate3d(-9999px, -9999px, 0)',
+              }}
+              className={`absolute left-0 top-0 box-border whitespace-nowrap rounded-xl border-2 px-3.5 py-1.5 text-[15px] font-bold leading-snug tracking-tight transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                isSelected
+                  ? 'border-white/90 bg-[#1D63ED] text-white shadow-[0_8px_20px_rgba(29,99,237,0.38)]'
+                  : 'border-slate-200 bg-white/95 text-[#0F2942] shadow-[0_4px_14px_rgba(15,41,66,0.16)] hover:bg-blue-50 hover:text-[#1D63ED]'
+              }`}
+            >
+              {hs.shortLabel || hs.label}
+            </button>
+          );
+        })}
+
+        {/* Status badge when paused */}
+        {!isPlaying && (
+          <div className="pointer-events-none absolute right-3 top-3 z-20 rounded-xl border border-amber-300/80 bg-amber-50/95 px-3 py-1 text-[13px] font-bold text-amber-900 shadow-sm">
+            Đang tạm dừng chuyển động · Vẫn xoay/thu phóng tự do
+          </div>
+        )}
+
+        <div className="pointer-events-none absolute bottom-3 left-3 z-10 rounded-lg border border-slate-200/80 bg-white/92 px-3 py-1.5 text-[13px] font-medium text-slate-700 shadow-sm">
           Kéo xoay 360° · Cuộn thu phóng · Nhấp nhãn hoặc mô hình để khám phá
         </div>
       </div>

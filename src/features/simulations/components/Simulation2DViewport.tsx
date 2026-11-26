@@ -9,7 +9,7 @@ import {
   RotateCcw,
   Volume2,
 } from 'lucide-react';
-import { SimulationDefinition, SimulationHotspot } from '../types';
+import { LabelDisplayMode, SimulationDefinition, SimulationHotspot } from '../types';
 import { SkillLabs2D } from './SkillLabs2D';
 import { LessonThumbnail } from './LessonThumbnails';
 
@@ -25,7 +25,7 @@ interface Simulation2DViewportProps {
   onSelectStage: (index: number) => void;
   selectedHotspotId: string | null;
   onSelectHotspot: (hotspot: SimulationHotspot) => void;
-  showLabels: boolean;
+  labelMode: LabelDisplayMode;
   onSpeak?: (text: string) => void;
 }
 
@@ -79,7 +79,7 @@ export const Simulation2DViewport = React.forwardRef<
       onSelectStage,
       selectedHotspotId,
       onSelectHotspot,
-      showLabels,
+      labelMode,
       onSpeak,
     },
     ref
@@ -109,6 +109,41 @@ export const Simulation2DViewport = React.forwardRef<
       : simulation.diagram2D.nodes[0];
 
     const activeStage = simulation.stages[stageIndex] ?? simulation.stages[0];
+
+    // Stage-scoped hotspots + deterministic anti-overlap 2D spatial positions (min gap, never jumping)
+    const stageHotspots = useMemo(() => {
+      return simulation.hotspots.filter(
+        (hs) => !hs.stageRange || hs.stageRange.length === 0 || hs.stageRange.includes(stageIndex)
+      );
+    }, [simulation.hotspots, stageIndex]);
+
+    const resolvedSpatialHotspots = useMemo(() => {
+      if (labelMode === 'observe') return [];
+      const list =
+        labelMode === 'presentation'
+          ? stageHotspots.filter((hs) => hs.id === selectedHotspotId)
+          : stageHotspots;
+
+      const placed: { hs: SimulationHotspot; x: number; y: number }[] = [];
+      for (const hs of list) {
+        let x = Math.min(84, Math.max(16, hs.position2D.x));
+        let y = Math.min(84, Math.max(16, hs.position2D.y));
+        for (let iter = 0; iter < 6; iter++) {
+          for (const other of placed) {
+            const dx = x - other.x;
+            const dy = y - other.y;
+            if (Math.abs(dx) < 22 && Math.abs(dy) < 15) {
+              y = y >= other.y ? Math.min(86, y + 14) : Math.max(14, y - 14);
+              if (Math.abs(y - other.y) < 12) {
+                x = x >= other.x ? Math.min(86, x + 18) : Math.max(14, x - 18);
+              }
+            }
+          }
+        }
+        placed.push({ hs, x, y });
+      }
+      return placed;
+    }, [stageHotspots, labelMode, selectedHotspotId]);
 
     useImperativeHandle(ref, () => ({
       resetView: () => {
@@ -360,13 +395,15 @@ export const Simulation2DViewport = React.forwardRef<
                           strokeDasharray={edge.dashed ? '6 5' : undefined}
                           markerEnd="url(#arrow-2d)"
                         />
-                        {showLabels && edge.label && (
+                        {labelMode !== 'observe' &&
+                          (labelMode === 'explore' || isHighlighted) &&
+                          edge.label && (
                           <g transform={`translate(${mx}, ${my})`}>
                             <rect
-                              x={-Math.max(42, edge.label.length * 3.8)}
+                              x={-Math.max(46, edge.label.length * 4.1)}
                               y={-12}
-                              width={Math.max(84, edge.label.length * 7.6)}
-                              height={22}
+                              width={Math.max(92, edge.label.length * 8.2)}
+                              height={24}
                               rx={6}
                               fill="#FFFFFF"
                               stroke="#CBD5E1"
@@ -375,7 +412,7 @@ export const Simulation2DViewport = React.forwardRef<
                               textAnchor="middle"
                               y={4}
                               fill="#334155"
-                              fontSize="12"
+                              fontSize="13"
                               fontWeight="600"
                               fontFamily="system-ui, sans-serif"
                             >
@@ -574,31 +611,34 @@ export const Simulation2DViewport = React.forwardRef<
                 <rect width="100%" height="100%" fill="url(#iso-2d-grid)" />
               </svg>
 
-              {/* Floating white/blue Vietnamese hotspot labels positioned from position2D */}
-              {simulation.hotspots.map((hs) => {
+              {/* Floating anti-overlap Vietnamese hotspot labels honoring 3-mode label system & stageRange */}
+              {resolvedSpatialHotspots.map(({ hs, x, y }) => {
                 const isSelected = hs.id === selectedHotspotId;
-                const leftPct = Math.min(84, Math.max(16, hs.position2D.x));
-                const topPct = Math.min(84, Math.max(16, hs.position2D.y));
                 return (
                   <button
                     key={hs.id}
                     type="button"
                     onClick={() => onSelectHotspot(hs)}
-                    style={{ left: `${leftPct}%`, top: `${topPct}%` }}
-                    className={`absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-xl px-3.5 py-2 text-[15px] font-bold transition ${
+                    style={{ left: `${x}%`, top: `${y}%` }}
+                    className={`absolute box-border -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-xl border-2 px-3.5 py-1.5 text-[15px] font-bold transition-colors ${
                       isSelected
-                        ? 'z-20 bg-[#1D63ED] text-white shadow-[0_8px_20px_rgba(29,99,237,0.35)] ring-2 ring-white'
-                        : 'z-10 border border-slate-200 bg-white text-[#0F2942] shadow-md hover:bg-blue-50 hover:text-[#1D63ED]'
+                        ? 'z-20 border-white/90 bg-[#1D63ED] text-white shadow-[0_8px_20px_rgba(29,99,237,0.35)]'
+                        : 'z-10 border-slate-200 bg-white text-[#0F2942] shadow-md hover:bg-blue-50 hover:text-[#1D63ED]'
                     }`}
                   >
                     {hs.shortLabel || hs.label}
                   </button>
                 );
               })}
+              {labelMode === 'observe' && (
+                <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg border border-slate-200 bg-white/90 px-3 py-1 text-[13px] font-semibold text-slate-600">
+                  Đang ở chế độ Quan sát mô hình (đã ẩn nhãn nổi) · Chọn thẻ chi tiết bên dưới
+                </div>
+              )}
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {simulation.hotspots.map((hs) => {
+              {stageHotspots.map((hs) => {
                 const isSelected = hs.id === selectedHotspotId;
                 return (
                   <button

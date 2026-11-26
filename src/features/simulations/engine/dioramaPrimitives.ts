@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createRealisticWaterMaterial } from '../effects/EnvironmentalEffects';
 
 export type DioramaTextureKind =
   | 'tile-grid'
@@ -294,6 +295,120 @@ export function tagHotspotGroup(obj: THREE.Object3D, hotspotId: string): void {
   obj.traverse((child) => {
     child.userData.hotspotId = hotspotId;
   });
+}
+
+/**
+ * Attaches an explicit, rock-solid static label anchor to `parent` so SmartLabelManager
+ * never jitters when flames, water, trees, or characters animate.
+ */
+export function attachLabelAnchor(
+  parent: THREE.Object3D,
+  hotspotId: string,
+  x = 0,
+  y = 1.6,
+  z = 0
+): THREE.Object3D {
+  const anchor = new THREE.Object3D();
+  anchor.name = `anchor-${hotspotId}`;
+  anchor.position.set(x, y, z);
+  anchor.userData.labelAnchorId = hotspotId;
+  parent.add(anchor);
+  return anchor;
+}
+
+/**
+ * Marks a hero 3D object (character, face, white silk scroll, fire centerpiece) as a
+ * ProtectedObjectArea so SmartLabelManager pushes labels cleanly outside it.
+ */
+export function markProtectedArea(obj: THREE.Object3D, padPx = 12): void {
+  obj.userData.protectedArea = true;
+  obj.userData.protectedPad = padPx;
+}
+
+/**
+ * Atmospheric vaulted celestial sky dome ("Vòm trời hình vòm tự nhiên") built with a
+ * smooth GLSL zenith-to-horizon gradient hemisphere + drifting soft cloud strata.
+ * Completely eliminates the old blue TorusGeometry sky ring!
+ */
+export function createVaultedSkyDome(radius = 5.4): {
+  group: THREE.Group;
+  domeMat: THREE.ShaderMaterial;
+  sunMesh: THREE.Mesh;
+  clouds: THREE.Group[];
+} {
+  const group = new THREE.Group();
+
+  const domeGeo = new THREE.SphereGeometry(radius, 36, 20, 0, Math.PI * 2, 0, Math.PI * 0.44);
+  const domeMat = new THREE.ShaderMaterial({
+    uniforms: {
+      uZenithColor: { value: new THREE.Color(0x1d4ed8) },
+      uHorizonColor: { value: new THREE.Color(0xbfdbfe) },
+      uChaosMix: { value: 0.0 },
+      uOpacity: { value: 0.78 },
+      uTime: { value: 0.0 },
+    },
+    vertexShader: /* glsl */ `
+      varying vec3 vLocalPos;
+      void main() {
+        vLocalPos = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uZenithColor;
+      uniform vec3 uHorizonColor;
+      uniform float uChaosMix;
+      uniform float uOpacity;
+      uniform float uTime;
+      varying vec3 vLocalPos;
+
+      void main() {
+        float h = clamp(vLocalPos.y, 0.0, 1.0);
+        vec3 clearCol = mix(uHorizonColor, uZenithColor, pow(h, 0.65));
+        // Swirling primordial dark-violet storm tone during Stage 1 chaos
+        float swirl = sin(vLocalPos.x * 5.0 + uTime * 0.6) * cos(vLocalPos.z * 5.0 - uTime * 0.5) * 0.5 + 0.5;
+        vec3 chaosCol = mix(vec3(0.14, 0.16, 0.22), vec3(0.32, 0.34, 0.42), swirl * 0.7 + h * 0.3);
+        vec3 col = mix(clearCol, chaosCol, clamp(uChaosMix, 0.0, 1.0));
+        // Soft atmospheric fade right at the lower rim so there is NEVER a hard ring edge
+        float edgeFade = smoothstep(0.18, 0.52, h);
+        gl_FragColor = vec4(col, uOpacity * edgeFade);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+
+  const dome = new THREE.Mesh(domeGeo, domeMat);
+  dome.scale.set(1.0, 0.56, 1.0);
+  group.add(dome);
+
+  const sunMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.46, 20, 16),
+    new THREE.MeshStandardMaterial({
+      color: 0xfef08a,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 1.15,
+      roughness: 0.25,
+    })
+  );
+  sunMesh.position.set(2.0, 1.85, -1.6);
+  group.add(sunMesh);
+
+  const clouds: THREE.Group[] = [];
+  const cloudSpecs: [number, number, number, number][] = [
+    [-2.4, 1.15, 0.8, 1.05],
+    [2.3, 1.25, 1.1, 0.92],
+    [-0.4, 1.55, -2.3, 1.15],
+  ];
+  cloudSpecs.forEach(([x, y, z, sc]) => {
+    const cl = createCloudCluster(sc, 0.8);
+    cl.position.set(x, y, z);
+    clouds.push(cl);
+    group.add(cl);
+  });
+
+  return { group, domeMat, sunMesh, clouds };
 }
 
 /**
@@ -711,13 +826,14 @@ export function createWindingRiver(opts: WindingRiverOptions): {
   group: THREE.Group;
   curve: THREE.CatmullRomCurve3;
   waterTexture: THREE.CanvasTexture;
+  waterMaterial: THREE.ShaderMaterial | THREE.MeshStandardMaterial;
 } {
   const { points, width = 1.65, waterColor = 0x2694bf, bankColor = 0x739c5d } = opts;
   const group = new THREE.Group();
 
   const curvePts = points.map(([x, z]) => new THREE.Vector3(x, 0.06, z));
   const curve = new THREE.CatmullRomCurve3(curvePts);
-  const samples = 44;
+  const samples = 48;
 
   const buildRibbon = (halfW: number, yPos: number, bevelY = 0): THREE.BufferGeometry => {
     const positions: number[] = [];
@@ -730,7 +846,6 @@ export function createWindingRiver(opts: WindingRiverOptions): {
       const tangent = curve.getTangentAt(u).normalize();
       const perpX = -tangent.z;
       const perpZ = tangent.x;
-      // Gentle natural width variation
       const wMod = 1 + 0.12 * Math.sin(u * Math.PI * 3);
       const hw = halfW * wMod;
 
@@ -769,20 +884,42 @@ export function createWindingRiver(opts: WindingRiverOptions): {
   bankMesh.receiveShadow = true;
   group.add(bankMesh);
 
-  // Inner shimmering water surface
+  // Detect if caller is using this ribbon as an earthen village lane (warm tan/brown) vs real flowing water
+  const cObj = new THREE.Color(waterColor);
+  const hsl = { h: 0, s: 0, l: 0 };
+  cObj.getHSL(hsl);
+  const isEarthPath = hsl.h < 0.22 && hsl.s < 0.52;
+
   const waterTexture = createDioramaTexture('water-ripple', 1.4, 3.6);
-  const waterGeo = buildRibbon(width * 0.5, 0.075);
-  const waterMat = new THREE.MeshStandardMaterial({
-    map: waterTexture,
-    color: waterColor,
-    roughness: 0.16,
-    metalness: 0.18,
-  });
-  const waterMesh = new THREE.Mesh(waterGeo, waterMat);
+  const waterGeo = buildRibbon(width * 0.5, 0.078);
+
+  let waterMaterial: THREE.ShaderMaterial | THREE.MeshStandardMaterial;
+  if (isEarthPath) {
+    waterMaterial = new THREE.MeshStandardMaterial({
+      color: waterColor,
+      roughness: 0.94,
+      metalness: 0.02,
+    });
+  } else {
+    const deep = cObj.clone().multiplyScalar(0.68).getHex();
+    const shallow = cObj.clone().lerp(new THREE.Color(0x7dd3fc), 0.28).getHex();
+    waterMaterial = createRealisticWaterMaterial({
+      deepColor: deep,
+      shallowColor: shallow,
+      flowSpeed: 0.3,
+      waveAmp: 0.025,
+      waveFreq: 1.45,
+      isOcean: false,
+      opacity: 0.94,
+    });
+    waterMaterial.userData.isWaterShader = true;
+  }
+
+  const waterMesh = new THREE.Mesh(waterGeo, waterMaterial);
   waterMesh.receiveShadow = true;
   group.add(waterMesh);
 
-  // Riverbank pebbles & reeds along both sides
+  // Riverbank pebbles & swaying reeds along both sides
   const pebbleMat = new THREE.MeshStandardMaterial({ color: 0x8e989e, roughness: 0.85, flatShading: true });
   const reedMat = new THREE.MeshStandardMaterial({ color: 0x4d7c3f, roughness: 0.8 });
   for (let i = 2; i < samples; i += 4) {
@@ -799,25 +936,31 @@ export function createWindingRiver(opts: WindingRiverOptions): {
     pebble.position.set(p.x + perpX * side * edgeDist, 0.06, p.z + perpZ * side * edgeDist);
     group.add(pebble);
 
-    if (i % 8 === 2) {
+    if (i % 8 === 2 && !isEarthPath) {
+      const reedClump = new THREE.Group();
+      reedClump.position.set(
+        p.x - perpX * side * (edgeDist + 0.05),
+        0.04,
+        p.z - perpZ * side * (edgeDist + 0.05)
+      );
+      reedClump.userData.windCanopy = true;
+      reedClump.userData.windAmp = 0.065;
       for (let r = 0; r < 3; r++) {
         const blade = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.025, 0.38 + r * 0.07, 5), reedMat);
-        blade.position.set(
-          p.x - perpX * side * (edgeDist + 0.05) + (r - 1) * 0.06,
-          0.2,
-          p.z - perpZ * side * (edgeDist + 0.05)
-        );
+        blade.position.set((r - 1) * 0.06, 0.19, 0);
         blade.rotation.z = (r - 1) * 0.18;
-        group.add(blade);
+        reedClump.add(blade);
       }
+      group.add(reedClump);
     }
   }
 
-  return { group, curve, waterTexture };
+  return { group, curve, waterTexture, waterMaterial };
 }
 
 /**
- * Dynamic subdivided ocean/river surface whose vertices undulate gently in `updateOcean`.
+ * Real-time GPU GLSL animated ocean / broad river surface with layered wave swells,
+ * caustic shimmer, specular sky reflection, and foaming crests.
  */
 export function createAnimatedOceanSurface(
   width = 12.0,
@@ -825,40 +968,37 @@ export function createAnimatedOceanSurface(
   color = 0x1678a8
 ): {
   mesh: THREE.Mesh;
+  waterMaterial: THREE.ShaderMaterial;
   updateWaves: (t: number, amplitude?: number) => void;
 } {
-  const waterTex = createDioramaTexture('water-ripple', 5, 4);
-  const geo = new THREE.PlaneGeometry(width, depth, 28, 24);
+  const geo = new THREE.PlaneGeometry(width, depth, 36, 32);
   geo.rotateX(-Math.PI / 2);
-  const baseY = new Float32Array(geo.attributes.position.count);
 
-  const mat = new THREE.MeshStandardMaterial({
-    map: waterTex,
-    color,
-    roughness: 0.2,
-    metalness: 0.18,
+  const baseCol = new THREE.Color(color);
+  const deepCol = baseCol.clone().multiplyScalar(0.62).getHex();
+  const shallowCol = baseCol.clone().lerp(new THREE.Color(0x56ccf2), 0.34).getHex();
+
+  const waterMaterial = createRealisticWaterMaterial({
+    deepColor: deepCol,
+    shallowColor: shallowCol,
+    flowSpeed: 0.22,
+    waveAmp: 0.065,
+    waveFreq: 0.92,
+    isOcean: true,
+    opacity: 0.96,
   });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.y = 0.06;
+  waterMaterial.userData.isWaterShader = true;
+
+  const mesh = new THREE.Mesh(geo, waterMaterial);
+  mesh.position.y = 0.075;
   mesh.receiveShadow = true;
 
-  const updateWaves = (t: number, amplitude = 0.08) => {
-    waterTex.offset.x = (t * 0.06) % 1;
-    waterTex.offset.y = (t * 0.035) % 1;
-    const pos = geo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const z = pos.getZ(i);
-      const wave =
-        Math.sin(x * 0.9 + t * 1.8) * Math.cos(z * 0.7 - t * 1.3) * amplitude +
-        Math.sin((x + z) * 0.55 + t * 2.2) * amplitude * 0.45;
-      pos.setY(i, baseY[i] + wave);
-    }
-    pos.needsUpdate = true;
-    geo.computeVertexNormals();
+  const updateWaves = (t: number, amplitude = 0.075) => {
+    waterMaterial.uniforms.uTime.value = t;
+    waterMaterial.uniforms.uWaveAmp.value = amplitude;
   };
 
-  return { mesh, updateWaves };
+  return { mesh, waterMaterial, updateWaves };
 }
 
 /**
@@ -1299,11 +1439,20 @@ export function createEdeLonghouse(scale = 1): THREE.Group {
   cabin.castShadow = true;
   g.add(cabin);
 
-  // Carved wooden entrance ladder ("cầu thang gỗ Ê Đê")
-  const stair = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.1, 0.44), darkTimber);
-  stair.position.set(2.95, 0.4, 0.25);
-  stair.rotation.z = -0.68;
-  g.add(stair);
+  // Carved wooden entrance ladder ("cầu thang gỗ Ê Đê") with stepped notches & side rails
+  const stairGroup = new THREE.Group();
+  const stairPlank = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.1, 0.54), darkTimber);
+  stairPlank.position.set(3.05, 0.42, 0.25);
+  stairPlank.rotation.z = -0.66;
+  stairPlank.castShadow = true;
+  stairGroup.add(stairPlank);
+  for (let s = 0; s < 5; s++) {
+    const rung = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.05, 0.48), wallWood);
+    rung.position.set(2.68 + s * 0.18, 0.65 - s * 0.13, 0.25);
+    stairGroup.add(rung);
+  }
+  g.add(stairGroup);
+  g.userData.stairGroup = stairGroup;
 
   // Iconic boat-curved longhouse thatched roof sweeping low over the walls
   const segX = 18;
@@ -1512,7 +1661,7 @@ export interface CharacterOptions {
   scale?: number;
   pose?: 'standing' | 'bowing' | 'heroic' | 'seated' | 'holding-tray' | 'writing-brush' | 'cangue-prisoner';
   headgear?: 'none' | 'hat-non' | 'turban' | 'bun' | 'helmet' | 'crown' | 'khan-dong';
-  prop?: 'none' | 'torch' | 'shield' | 'scroll' | 'racket' | 'spear' | 'brush' | 'oar';
+  prop?: 'none' | 'torch' | 'shield' | 'scroll' | 'racket' | 'spear' | 'brush' | 'oar' | 'zinc-coins' | 'ink-basin';
 }
 
 export function createArticulatedFigure(opts: CharacterOptions = {}): THREE.Group {
@@ -1528,70 +1677,73 @@ export function createArticulatedFigure(opts: CharacterOptions = {}): THREE.Grou
   } = opts;
 
   const group = new THREE.Group();
+  markProtectedArea(group, 10);
+
   const robeMat = new THREE.MeshStandardMaterial({ color: robeColor, roughness: 0.7 });
   const accentMat = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.52 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.62 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.6 });
   const hairMat = new THREE.MeshStandardMaterial({ color: hairColor, roughness: 0.78 });
   const shoeMat = new THREE.MeshStandardMaterial({ color: 0x292524, roughness: 0.85 });
 
-  // Grounded boots / feet & lower trousers
-  const legH = pose === 'seated' ? 0.34 : 0.64;
+  // Grounded boots / feet & lower trousers (refined anatomical proportion)
+  const legH = pose === 'seated' ? 0.36 : 0.68;
   for (const sx of [-0.11, 0.11]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.062, legH, 10), shoeMat);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.06, legH, 10), shoeMat);
     leg.position.set(sx, legH / 2, pose === 'seated' ? 0.14 : 0);
     if (pose === 'seated') leg.rotation.x = Math.PI / 2.2;
     leg.castShadow = true;
     group.add(leg);
   }
 
-  // Flowing sculpted robe / tunic with flared hem & lapel collar
-  const robeY = pose === 'seated' ? 0.68 : 0.94;
-  const robeH = pose === 'seated' ? 0.86 : 1.06;
+  // Flowing sculpted robe / tunic with natural shoulders, flared hem & collar lapel
+  const robeY = pose === 'seated' ? 0.72 : 0.98;
+  const robeH = pose === 'seated' ? 0.88 : 1.12;
   const robeGeo = new THREE.LatheGeometry(
     [
-      new THREE.Vector2(0.32, 0),
-      new THREE.Vector2(0.27, robeH * 0.35),
-      new THREE.Vector2(0.21, robeH * 0.75),
-      new THREE.Vector2(0.23, robeH * 0.95),
+      new THREE.Vector2(0.31, 0),
+      new THREE.Vector2(0.26, robeH * 0.36),
+      new THREE.Vector2(0.20, robeH * 0.72),
+      new THREE.Vector2(0.24, robeH * 0.92),
       new THREE.Vector2(0.11, robeH),
     ],
-    16
+    18
   );
   const torso = new THREE.Mesh(robeGeo, robeMat);
   torso.position.y = robeY - robeH * 0.5;
   torso.castShadow = true;
   torso.receiveShadow = true;
-  if (pose === 'bowing') torso.rotation.x = 0.36;
+  if (pose === 'bowing') torso.rotation.x = 0.4;
   group.add(torso);
 
   // Waist sash & front decorative panel (áo dài / thổ cẩm / quan phục)
-  const sash = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.12, 16), accentMat);
+  const sash = new THREE.Mesh(new THREE.CylinderGeometry(0.215, 0.235, 0.12, 16), accentMat);
   sash.position.set(0, robeY - 0.04, pose === 'bowing' ? 0.06 : 0);
-  if (pose === 'bowing') sash.rotation.x = 0.36;
+  if (pose === 'bowing') sash.rotation.x = 0.4;
   group.add(sash);
 
-  const frontLapel = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.58, 0.06), accentMat);
-  frontLapel.position.set(0, robeY - 0.18, 0.22);
+  const frontLapel = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.62, 0.06), accentMat);
+  frontLapel.position.set(0, robeY - 0.18, 0.21);
   if (pose === 'bowing') {
-    frontLapel.position.z = 0.26;
-    frontLapel.rotation.x = 0.36;
+    frontLapel.position.z = 0.28;
+    frontLapel.rotation.x = 0.4;
   }
   group.add(frontLapel);
 
-  // Neck + sculpted Head + hair cap
-  const headY = pose === 'seated' ? 1.32 : pose === 'bowing' ? 1.5 : 1.66;
-  const headZ = pose === 'bowing' ? 0.25 : 0;
+  // Neck + refined realistic head proportion (not toy-sized) + hair cap
+  const headY = pose === 'seated' ? 1.36 : pose === 'bowing' ? 1.54 : 1.72;
+  const headZ = pose === 'bowing' ? 0.29 : 0;
 
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.075, 0.14, 10), skinMat);
-  neck.position.set(0, headY - 0.16, headZ * 0.7);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.07, 0.14, 10), skinMat);
+  neck.position.set(0, headY - 0.15, headZ * 0.72);
   group.add(neck);
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 18, 16), skinMat);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.175, 18, 16), skinMat);
+  head.scale.set(0.94, 1.06, 0.96);
   head.position.set(0, headY, headZ);
   head.castShadow = true;
   group.add(head);
 
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.208, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.56), hairMat);
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.184, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.56), hairMat);
   hair.position.set(0, headY + 0.02, headZ - 0.02);
   hair.rotation.x = -0.18;
   group.add(hair);
@@ -1599,55 +1751,55 @@ export function createArticulatedFigure(opts: CharacterOptions = {}): THREE.Grou
   // Distinct cultural headgear
   if (headgear === 'hat-non') {
     const non = new THREE.Mesh(
-      new THREE.ConeGeometry(0.42, 0.24, 24),
+      new THREE.ConeGeometry(0.4, 0.22, 24),
       new THREE.MeshStandardMaterial({ color: 0xe6d3a7, roughness: 0.78 })
     );
-    non.position.set(0, headY + 0.22, headZ);
+    non.position.set(0, headY + 0.2, headZ);
     non.castShadow = true;
     group.add(non);
   } else if (headgear === 'turban' || headgear === 'khan-dong') {
     const wrap = new THREE.Mesh(
-      new THREE.TorusGeometry(0.19, 0.065, 10, 22),
+      new THREE.TorusGeometry(0.17, 0.058, 10, 22),
       new THREE.MeshStandardMaterial({ color: headgear === 'khan-dong' ? 0x1e293b : accentColor, roughness: 0.72 })
     );
     wrap.rotation.x = Math.PI / 2;
     wrap.position.set(0, headY + 0.1, headZ);
     group.add(wrap);
   } else if (headgear === 'bun') {
-    const bun = new THREE.Mesh(new THREE.SphereGeometry(0.088, 12, 10), hairMat);
-    bun.position.set(0, headY + 0.17, headZ - 0.12);
+    const bun = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 10), hairMat);
+    bun.position.set(0, headY + 0.15, headZ - 0.11);
     group.add(bun);
   } else if (headgear === 'helmet') {
     const helm = new THREE.Mesh(
-      new THREE.SphereGeometry(0.24, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
+      new THREE.SphereGeometry(0.215, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
       new THREE.MeshStandardMaterial({ color: 0x4d6b3c, roughness: 0.78 })
     );
-    helm.position.set(0, headY + 0.05, headZ);
+    helm.position.set(0, headY + 0.04, headZ);
     const brim = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.29, 0.31, 0.03, 18),
+      new THREE.CylinderGeometry(0.26, 0.28, 0.03, 18),
       new THREE.MeshStandardMaterial({ color: 0x3f5a30, roughness: 0.82 })
     );
-    brim.position.set(0, headY + 0.05, headZ);
+    brim.position.set(0, headY + 0.04, headZ);
     group.add(helm, brim);
   } else if (headgear === 'crown') {
     const crown = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.18, 0.16, 0.17, 8),
+      new THREE.CylinderGeometry(0.16, 0.145, 0.16, 8),
       new THREE.MeshStandardMaterial({ color: 0xeab308, metalness: 0.58, roughness: 0.3 })
     );
-    crown.position.set(0, headY + 0.2, headZ);
+    crown.position.set(0, headY + 0.19, headZ);
     group.add(crown);
   }
 
   // Articulated sleeves & forearms with hands
-  const armY = pose === 'seated' ? 1.02 : 1.3;
+  const armY = pose === 'seated' ? 1.05 : 1.35;
   const makeArm = (side: -1 | 1, rotZ: number, rotX: number) => {
     const armG = new THREE.Group();
-    armG.position.set(side * 0.27, armY, headZ * 0.5);
-    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.088, 0.5, 10), robeMat);
-    sleeve.position.y = -0.22;
+    armG.position.set(side * 0.26, armY, headZ * 0.5);
+    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.084, 0.52, 10), robeMat);
+    sleeve.position.y = -0.23;
     sleeve.castShadow = true;
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), skinMat);
-    hand.position.y = -0.5;
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.052, 10, 8), skinMat);
+    hand.position.y = -0.52;
     armG.add(sleeve, hand);
     armG.rotation.z = rotZ;
     armG.rotation.x = rotX;
@@ -1661,64 +1813,79 @@ export function createArticulatedFigure(opts: CharacterOptions = {}): THREE.Grou
     group.add(makeArm(-1, 0.24, -0.82));
     group.add(makeArm(1, -0.24, -0.88));
   } else if (pose === 'bowing') {
-    group.add(makeArm(-1, 0.28, -0.68));
-    group.add(makeArm(1, -0.28, -0.68));
+    group.add(makeArm(-1, 0.28, -0.74));
+    group.add(makeArm(1, -0.28, -0.74));
   } else if (pose === 'cangue-prisoner') {
     group.add(makeArm(-1, 0.3, -0.78));
     group.add(makeArm(1, -0.3, -0.92));
 
-    // Authentic heavy wooden neck cangue ("gông gỗ chữ nhật cổ Huấn Cao")
+    // Separate group for wooden neck cangue ("gông gỗ") & iron ankle shackles ("xiềng chân")
+    // so builders can tag & inspect `Gông và xiềng` as its own hotspot (`hs-03-7`)!
+    const cangueGroup = new THREE.Group();
     const woodMat = new THREE.MeshStandardMaterial({ color: 0x714726, roughness: 0.86 });
-    const cangueBarL = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.09, 1.05), woodMat);
-    cangueBarL.position.set(-0.22, headY - 0.17, 0.05);
-    const cangueBarR = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.09, 1.05), woodMat);
-    cangueBarR.position.set(0.22, headY - 0.17, 0.05);
-    const cangueFront = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.08, 0.12), woodMat);
-    cangueFront.position.set(0, headY - 0.17, 0.48);
-    const cangueBack = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.08, 0.12), woodMat);
-    cangueBack.position.set(0, headY - 0.17, -0.38);
+    const cangueBarL = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.09, 1.08), woodMat);
+    cangueBarL.position.set(-0.22, headY - 0.16, 0.05);
+    const cangueBarR = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.09, 1.08), woodMat);
+    cangueBarR.position.set(0.22, headY - 0.16, 0.05);
+    const cangueFront = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.08, 0.12), woodMat);
+    cangueFront.position.set(0, headY - 0.16, 0.49);
+    const cangueBack = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.08, 0.12), woodMat);
+    cangueBack.position.set(0, headY - 0.16, -0.39);
     cangueBarL.castShadow = true;
     cangueBarR.castShadow = true;
-    group.add(cangueBarL, cangueBarR, cangueFront, cangueBack);
+    cangueGroup.add(cangueBarL, cangueBarR, cangueFront, cangueBack);
 
-    // Iron ankle shackles ("xiềng chân")
     const ironMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.72, roughness: 0.4 });
     for (const sx of [-0.11, 0.11]) {
       const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.022, 8, 14), ironMat);
       cuff.rotation.x = Math.PI / 2;
       cuff.position.set(sx, 0.16, 0);
-      group.add(cuff);
+      cangueGroup.add(cuff);
     }
     const chain = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.03, 0.03), ironMat);
     chain.position.set(0, 0.14, 0.05);
-    group.add(chain);
+    cangueGroup.add(chain);
+    group.add(cangueGroup);
+    group.userData.cangueGroup = cangueGroup;
   } else {
     group.add(makeArm(-1, 0.18, -0.1));
     group.add(makeArm(1, -0.18, -0.1));
   }
 
-  // Cultural props
+  // Cultural props — ZERO ConeGeometry flames! Torch prop exposes `torchTipAnchor` for real GLSL fire!
   if (prop === 'torch') {
     const stick = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.032, 0.04, 0.85, 8),
-      new THREE.MeshStandardMaterial({ color: 0x5c3a21 })
+      new THREE.CylinderGeometry(0.034, 0.044, 0.86, 8),
+      new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.9 })
     );
-    stick.position.set(0.55, armY + 0.14, 0.25);
-    const flame = new THREE.Mesh(
-      new THREE.ConeGeometry(0.14, 0.36, 10),
-      new THREE.MeshStandardMaterial({ color: 0xff9b26, emissive: 0xff4500, emissiveIntensity: 1.6 })
+    stick.position.set(0.56, armY + 0.14, 0.25);
+    const oilWrap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.068, 0.05, 0.18, 10),
+      new THREE.MeshStandardMaterial({ color: 0x292524, roughness: 0.95 })
     );
-    flame.position.set(0.55, armY + 0.66, 0.25);
-    group.add(stick, flame);
+    oilWrap.position.set(0.56, armY + 0.56, 0.25);
+    const tipAnchor = new THREE.Object3D();
+    tipAnchor.position.set(0.56, armY + 0.64, 0.25);
+    tipAnchor.userData.torchTip = true;
+    group.add(stick, oilWrap, tipAnchor);
+    group.userData.torchTipAnchor = tipAnchor;
   } else if (prop === 'shield') {
+    const shieldGroup = new THREE.Group();
     const shield = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.42, 0.42, 0.06, 20),
-      new THREE.MeshStandardMaterial({ color: 0xb45309, metalness: 0.45, roughness: 0.42 })
+      new THREE.CylinderGeometry(0.44, 0.44, 0.065, 22),
+      new THREE.MeshStandardMaterial({ color: 0xb45309, metalness: 0.5, roughness: 0.38 })
     );
     shield.rotation.z = Math.PI / 2;
-    shield.position.set(-0.48, armY - 0.1, 0.26);
+    const boss = new THREE.Mesh(
+      new THREE.SphereGeometry(0.11, 12, 10),
+      new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.68, roughness: 0.25 })
+    );
+    boss.position.set(-0.04, 0, 0);
+    shieldGroup.add(shield, boss);
+    shieldGroup.position.set(-0.48, armY - 0.1, 0.26);
     shield.castShadow = true;
-    group.add(shield);
+    group.add(shieldGroup);
+    group.userData.shieldGroup = shieldGroup;
   } else if (prop === 'scroll') {
     const scroll = new THREE.Mesh(
       new THREE.CylinderGeometry(0.06, 0.06, 0.56, 10),
@@ -1729,7 +1896,7 @@ export function createArticulatedFigure(opts: CharacterOptions = {}): THREE.Grou
     group.add(scroll);
   } else if (prop === 'brush') {
     const brushShaft = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.016, 0.018, 0.42, 8),
+      new THREE.CylinderGeometry(0.016, 0.018, 0.44, 8),
       new THREE.MeshStandardMaterial({ color: 0x92400e })
     );
     brushShaft.position.set(0.24, armY - 0.28, 0.44);
@@ -1741,6 +1908,27 @@ export function createArticulatedFigure(opts: CharacterOptions = {}): THREE.Grou
     tip.rotation.x = Math.PI + 0.5;
     tip.position.set(0.24, armY - 0.48, 0.52);
     group.add(brushShaft, tip);
+  } else if (prop === 'zinc-coins') {
+    const coinMat = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, metalness: 0.72, roughness: 0.3 });
+    for (let c = 0; c < 4; c++) {
+      const coin = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.014, 6, 12), coinMat);
+      coin.rotation.x = Math.PI / 2;
+      coin.position.set((c - 1.5) * 0.035, armY - 0.22 + c * 0.012, 0.48);
+      group.add(coin);
+    }
+  } else if (prop === 'ink-basin') {
+    const basin = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.13, 0.12, 16),
+      new THREE.MeshStandardMaterial({ color: 0x27272a, roughness: 0.42 })
+    );
+    basin.position.set(0, armY - 0.18, 0.46);
+    const inkSurface = new THREE.Mesh(
+      new THREE.CircleGeometry(0.16, 16),
+      new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.12, metalness: 0.35 })
+    );
+    inkSurface.rotation.x = -Math.PI / 2;
+    inkSurface.position.set(0, armY - 0.115, 0.46);
+    group.add(basin, inkSurface);
   } else if (prop === 'racket') {
     const handle = new THREE.Mesh(
       new THREE.CylinderGeometry(0.025, 0.025, 0.44, 8),
@@ -1761,7 +1949,9 @@ export function createArticulatedFigure(opts: CharacterOptions = {}): THREE.Grou
 }
 
 /**
- * Natural organic multi-branch tree with curved trunk, root flare, and 3-tone foliage clusters.
+ * Natural organic multi-branch tree with grounded static trunk & root flare,
+ * plus a separate wind-swaying foliage canopy group (`userData.windCanopy = true`).
+ * Trunk NEVER rocks rigidly out of the ground!
  */
 export function createLayeredTree(
   foliageColor = 0x2f7d4d,
@@ -1771,14 +1961,13 @@ export function createLayeredTree(
   const g = new THREE.Group();
   const barkMat = new THREE.MeshStandardMaterial({ color: 0x62432a, roughness: 0.92 });
 
-  // Slightly curved tapered trunk with root flare
+  // Grounded static trunk & forked limbs
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.16, 1.35, 10), barkMat);
   trunk.position.y = 0.66;
   trunk.rotation.z = 0.04;
   trunk.castShadow = true;
   g.add(trunk);
 
-  // Two forked limbs
   for (const [dir, h, tilt] of [
     [-1, 0.95, 0.48],
     [1, 1.05, -0.44],
@@ -1790,7 +1979,12 @@ export function createLayeredTree(
     g.add(branch);
   }
 
-  // Three tonal shades for depth & sunlight gradient
+  // Dedicated wind-swaying canopy pivoted at top of trunk (y = 1.24)
+  const canopyGroup = new THREE.Group();
+  canopyGroup.position.set(0, 1.24, 0);
+  canopyGroup.userData.windCanopy = true;
+  canopyGroup.userData.windAmp = 0.045;
+
   const baseCol = new THREE.Color(foliageColor);
   const darkCol = baseCol.clone().multiplyScalar(0.76);
   const lightCol = baseCol.clone().lerp(new THREE.Color(0xc8e6a0), 0.24);
@@ -1802,11 +1996,11 @@ export function createLayeredTree(
   ];
 
   const clusters: [number, number, number, number, number][] = [
-    [-0.32, 1.36, 0.12, 0.46, 0],
-    [0.34, 1.42, -0.1, 0.44, 0],
-    [0.02, 1.56, 0.22, 0.5, 1],
-    [-0.14, 1.68, -0.18, 0.46, 1],
-    [0.08, 1.92, 0.02, 0.42, 2],
+    [-0.32, 0.14, 0.12, 0.46, 0],
+    [0.34, 0.2, -0.1, 0.44, 0],
+    [0.02, 0.34, 0.22, 0.5, 1],
+    [-0.14, 0.46, -0.18, 0.46, 1],
+    [0.08, 0.7, 0.02, 0.42, 2],
   ];
 
   clusters.forEach(([x, y, z, r, mIdx]) => {
@@ -1815,7 +2009,7 @@ export function createLayeredTree(
     puff.position.set(x, y, z);
     puff.castShadow = true;
     puff.receiveShadow = true;
-    g.add(puff);
+    canopyGroup.add(puff);
   });
 
   if (blossomColor !== undefined) {
@@ -1828,18 +2022,21 @@ export function createLayeredTree(
     for (let i = 0; i < 9; i++) {
       const a = (i / 9) * Math.PI * 2;
       const b = new THREE.Mesh(new THREE.SphereGeometry(0.085, 8, 6), blMat);
-      b.position.set(Math.cos(a) * 0.48, 1.44 + (i % 3) * 0.22, Math.sin(a) * 0.44);
-      g.add(b);
+      b.position.set(Math.cos(a) * 0.48, 0.22 + (i % 3) * 0.22, Math.sin(a) * 0.44);
+      canopyGroup.add(b);
     }
   }
 
+  g.add(canopyGroup);
+  g.userData.canopyGroup = canopyGroup;
   g.add(createContactShadow(0.68, 0.68, 0.18));
   g.scale.setScalar(scale);
   return g;
 }
 
 /**
- * Graceful Vietnamese bamboo clump ("Khóm tre / Trúc xanh") for riversides & temple courtyards.
+ * Graceful Vietnamese bamboo clump ("Khóm tre / Trúc xanh") with grounded lower culms
+ * and wind-swaying upper leaf crowns (`userData.windCanopy = true`).
  */
 export function createBambooCluster(scale = 1): THREE.Group {
   const g = new THREE.Group();
@@ -1859,10 +2056,15 @@ export function createBambooCluster(scale = 1): THREE.Group {
     culm.castShadow = true;
     g.add(culm);
 
+    const tuftPivot = new THREE.Group();
+    tuftPivot.position.set(x - Math.sin(lean) * h * 0.42, h * 0.88, z);
+    tuftPivot.userData.windCanopy = true;
+    tuftPivot.userData.windAmp = 0.075;
     const tuft = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 1), leafMat);
     tuft.scale.set(1.4, 0.55, 1.2);
-    tuft.position.set(x - Math.sin(lean) * h * 0.45, h * 0.92, z);
-    g.add(tuft);
+    tuft.position.y = 0.08;
+    tuftPivot.add(tuft);
+    g.add(tuftPivot);
   });
 
   g.scale.setScalar(scale);
