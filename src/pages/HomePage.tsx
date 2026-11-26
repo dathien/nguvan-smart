@@ -165,6 +165,7 @@ export const HomePage: React.FC<HomePageProps> = ({
     <div className="bg-[#FAF8F5]">
       {/* Hero Banner & Auto-Slider */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
+        <a href="/kham-pha-ngu-van" className="inline-flex rounded-lg bg-teal-800 text-white px-4 py-3 mb-4 text-[16px] font-semibold">Khám phá Ngữ văn 2D/3D</a>
         <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <p className="text-xs font-semibold tracking-wider text-[#0D7A6F] uppercase">
