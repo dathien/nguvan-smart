@@ -1,7 +1,8 @@
 import React,{useEffect,useRef} from 'react';
+import {MythScene} from './MythScene';
 import type {Lesson} from './catalog';
 // Perspective projection of actual XYZ geometry, rendered with Canvas; no external assets.
-export function Scene({lesson,angle,zoom,playing,selected,onSelect}:{lesson:Lesson;angle:number;zoom:number;playing:boolean;selected:number;onSelect:(i:number)=>void}){
+function BasicScene({lesson,angle,zoom,playing,selected,onSelect}:{lesson:Lesson;angle:number;zoom:number;playing:boolean;selected:number;onSelect:(i:number)=>void}){
  const ref=useRef<HTMLCanvasElement>(null); const hits=useRef<{x:number;y:number;i:number}[]>([]);
  useEffect(()=>{const c=ref.current;if(!c)return;const ctx=c.getContext('2d');if(!ctx)return;let raf=0;let start=performance.now();
  const draw=(now:number)=>{const t=playing?(now-start)/1000:0;const w=c.width,h=c.height;ctx.fillStyle='#e4eef1';ctx.fillRect(0,0,w,h);const a=angle*Math.PI/180;const project=(x:number,y:number,z:number)=>{const X=x*Math.cos(a)-z*Math.sin(a),Z=x*Math.sin(a)+z*Math.cos(a);const d=12+Z;return [w/2+X*550*zoom/d,h*.58+(Z*.42-y)*550*zoom/d,Z]};
@@ -13,3 +14,5 @@ export function Scene({lesson,angle,zoom,playing,selected,onSelect}:{lesson:Less
  const anchors=[[-2,0,-1],[0,0,0],[2,0,-1]];anchors.forEach(([x,y,z],i)=>{box(x,y,z,.45,.8,.45,i===selected?'#e5a33b':'#226d76')});faces.sort((a,b)=>b.depth-a.depth).forEach(f=>{ctx.beginPath();f.p.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.fillStyle=f.color;ctx.fill();ctx.strokeStyle='#24374644';ctx.stroke()});hits.current=anchors.map(([x,y,z],i)=>{const p=project(x,y+1.1,z);ctx.beginPath();ctx.arc(p[0],p[1],17,0,Math.PI*2);ctx.fillStyle=i===selected?'#a45b00':'#075e66';ctx.fill();ctx.fillStyle='white';ctx.font='bold 19px Arial';ctx.textAlign='center';ctx.fillText(String(i+1),p[0],p[1]+6);return{x:p[0],y:p[1],i}});if(playing)raf=requestAnimationFrame(draw)};draw(start);return()=>cancelAnimationFrame(raf)},[lesson,angle,zoom,playing,selected]);
  return <canvas ref={ref} width={900} height={480} className="w-full h-auto rounded-xl border" aria-label={'Mô hình không gian minh họa '+lesson.title} onClick={e=>{const r=e.currentTarget.getBoundingClientRect();const x=(e.clientX-r.left)*900/r.width,y=(e.clientY-r.top)*480/r.height;const hit=hits.current.find(p=>Math.hypot(p.x-x,p.y-y)<25);if(hit)onSelect(hit.i)}}/>;
 }
+
+export function Scene(props: React.ComponentProps<typeof BasicScene>){return props.lesson.id===1?<MythScene {...props}/>:<BasicScene {...props}/>;}
